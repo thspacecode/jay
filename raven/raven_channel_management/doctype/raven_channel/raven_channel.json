@@ -21,12 +21,15 @@
   "is_dm_thread",
   "column_break_puci",
   "is_self_message",
+  "is_customer",
   "column_break_ubts",
   "is_archived",
   "section_break_wlnt",
   "last_message_timestamp",
   "dm_user_1",
   "dm_user_2",
+  "customer_user",
+  "customer_provider",
   "column_break_eckt",
   "last_message_details",
   "section_break_acpc",
@@ -223,6 +226,30 @@
    "label": "DM User 2",
    "options": "Raven User",
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_customer",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Is Customer",
+   "set_only_once": 1
+  },
+  {
+   "depends_on": "eval:doc.is_customer;",
+   "fieldname": "customer_user",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Raven User",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.is_customer;",
+   "fieldname": "customer_provider",
+   "fieldtype": "Data",
+   "label": "Provider",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
@@ -236,7 +263,7 @@
    "link_fieldname": "channel_id"
   }
  ],
- "modified": "2026-01-08 12:58:41.748067",
+ "modified": "2026-04-06 13:56:16.510331",
  "modified_by": "Administrator",
  "module": "Raven Channel Management",
  "name": "Raven Channel",
@@ -268,6 +295,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "type",
  "show_title_field_in_link": 1,
  "sort_field": "modified",

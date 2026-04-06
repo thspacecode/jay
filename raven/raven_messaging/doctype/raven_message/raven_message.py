@@ -34,7 +34,6 @@ class RavenMessage(Document):
 
 	if TYPE_CHECKING:
 		from frappe.types import DF
-
 		from raven.raven_messaging.doctype.raven_mention.raven_mention import RavenMention
 
 		blurhash: DF.SmallText | None
@@ -47,6 +46,7 @@ class RavenMessage(Document):
 		image_height: DF.Data | None
 		image_width: DF.Data | None
 		is_bot_message: DF.Check
+		is_customer_message: DF.Check
 		is_edited: DF.Check
 		is_forwarded: DF.Check
 		is_reply: DF.Check

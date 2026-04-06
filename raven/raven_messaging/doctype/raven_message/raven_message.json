@@ -36,7 +36,8 @@
   "is_bot_message",
   "bot",
   "hide_link_preview",
-  "notification"
+  "notification",
+  "is_customer_message"
  ],
  "fields": [
   {
@@ -208,11 +209,17 @@
    "fieldname": "links",
    "fieldtype": "Small Text",
    "label": "Links"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_customer_message",
+   "fieldtype": "Check",
+   "label": "Is Customer Message"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-01-31 13:55:57.988161",
+ "modified": "2026-04-06 15:26:23.592738",
  "modified_by": "Administrator",
  "module": "Raven Messaging",
  "name": "Raven Message",
