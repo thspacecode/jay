@@ -29,7 +29,7 @@
   "dm_user_1",
   "dm_user_2",
   "customer_user",
-  "customer_provider",
+  "chat_integration",
   "column_break_eckt",
   "last_message_details",
   "section_break_acpc",
@@ -246,10 +246,10 @@
   },
   {
    "depends_on": "eval:doc.is_customer;",
-   "fieldname": "customer_provider",
-   "fieldtype": "Data",
-   "label": "Provider",
-   "read_only": 1
+   "fieldname": "chat_integration",
+   "fieldtype": "Link",
+   "label": "Chat Integration",
+   "options": "Chat Integration"
   }
  ],
  "index_web_pages_for_search": 1,
@@ -263,7 +263,7 @@
    "link_fieldname": "channel_id"
   }
  ],
- "modified": "2026-04-06 13:56:16.510331",
+ "modified": "2026-04-07 19:21:59.920739",
  "modified_by": "Administrator",
  "module": "Raven Channel Management",
  "name": "Raven Channel",

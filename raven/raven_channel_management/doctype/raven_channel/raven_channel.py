@@ -16,11 +16,14 @@ class RavenChannel(Document):
 
 	if TYPE_CHECKING:
 		from frappe.types import DF
-		from raven.raven.doctype.raven_pinned_messages.raven_pinned_messages import RavenPinnedMessages
+
+		from raven.raven.doctype.raven_pinned_messages.raven_pinned_messages import (
+			RavenPinnedMessages,
+		)
 
 		channel_description: DF.SmallText | None
 		channel_name: DF.Data
-		customer_provider: DF.Data | None
+		chat_integration: DF.Link | None
 		customer_user: DF.Link | None
 		dm_user_1: DF.Link | None
 		dm_user_2: DF.Link | None
@@ -251,8 +254,8 @@ class RavenChannel(Document):
 				channel_member.insert(ignore_permissions=True)
 
 	def autoname(self):
-		if self.channel_name:
-			self.name = self.channel_name.strip().lower().replace(" ", "-")
+		if self.id:
+			self.name = self.id
 		elif self.is_direct_message == 0 and self.is_thread == 0:
 			# Add workspace name to the channel name
 			self.name = self.workspace + "-" + self.channel_name.strip().lower().replace(" ", "-")
