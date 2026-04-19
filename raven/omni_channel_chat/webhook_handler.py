@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 	)
 
 
-class WebhookMessageHandler:
+class WebhookHandler:
 	def __init__(self, provider: "Provider"):
 		self.provider = provider
 		self.chat_integration: "OmniChannelChatProvider" = provider.provider_config
