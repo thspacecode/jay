@@ -723,11 +723,10 @@ class RavenMessage(Document):
 			filters=self.channel_id,
 			fieldname=["is_customer", "customer_user", "omni_channel_chat_provider"],
 			as_dict=True,
+			cache=True,
 		)
-		if not channel or not channel.is_customer:
-			return
 
-		if not channel.omni_channel_chat_provider:
+		if not channel or not channel.is_customer or not channel.omni_channel_chat_provider:
 			return
 
 		omni_channel_chat_provider = frappe.get_doc(
