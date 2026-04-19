@@ -34,7 +34,10 @@ class RavenMessage(Document):
 
 	if TYPE_CHECKING:
 		from frappe.types import DF
-		from raven.raven_messaging.doctype.raven_mention.raven_mention import RavenMention
+
+		from raven.raven_messaging.doctype.raven_mention.raven_mention import (
+			RavenMention,
+		)
 
 		blurhash: DF.SmallText | None
 		bot: DF.Link | None
@@ -163,7 +166,9 @@ class RavenMessage(Document):
 
 		if not self.is_new() and self.has_value_changed("message_reactions"):
 			frappe.throw(
-				_("Direct modification of message_reactions is not allowed. Use the Reactions API.")
+				_(
+					"Direct modification of message_reactions is not allowed. Use the Reactions API."
+				)
 			)
 
 	def validate_linked_message(self):
@@ -172,7 +177,8 @@ class RavenMessage(Document):
 		"""
 		if self.linked_message:
 			if (
-				frappe.get_cached_value("Raven Message", self.linked_message, "channel_id") != self.channel_id
+				frappe.get_cached_value("Raven Message", self.linked_message, "channel_id")
+				!= self.channel_id
 			):
 				frappe.throw(_("Linked message should be in the same channel"))
 
@@ -212,6 +218,7 @@ class RavenMessage(Document):
 			self.handle_ai_message()
 
 		self.send_push_notification()
+		self.push_message_to_omni_channel_chat_provider()
 
 	def handle_ai_message(self):
 
@@ -307,13 +314,10 @@ class RavenMessage(Document):
 		channel_doc = frappe.get_cached_doc("Raven Channel", self.channel_id)
 		# If the message is a direct message, then we can only send it to one user
 		if channel_doc.is_direct_message:
-
 			if not channel_doc.is_self_message:
-
 				peer_user_doc = get_peer_user(self.channel_id, 1)
 
 				if peer_user_doc.get("type") == "User":
-
 					frappe.publish_realtime(
 						"raven:unread_channel_count_updated",
 						{
@@ -390,7 +394,11 @@ class RavenMessage(Document):
 				):
 					try:
 						frappe.get_doc(
-							{"doctype": "Raven Channel Member", "channel_id": self.channel_id, "user_id": mention.user}
+							{
+								"doctype": "Raven Channel Member",
+								"channel_id": self.channel_id,
+								"user_id": mention.user,
+							}
 						).insert(ignore_permissions=True)
 					except Exception:
 						pass
@@ -506,7 +514,9 @@ class RavenMessage(Document):
 		if is_thread:
 			title = f"{owner_name} in thread"
 		else:
-			channel_name = frappe.get_cached_value("Raven Channel", self.channel_id, "channel_name")
+			channel_name = frappe.get_cached_value(
+				"Raven Channel", self.channel_id, "channel_name"
+			)
 			title = f"{owner_name} in #{channel_name}"
 
 		# Prepare content for data payload - truncate if text message
@@ -550,7 +560,12 @@ class RavenMessage(Document):
 
 		# delete poll if the message is of type poll after deleting the message
 		if self.message_type == "Poll":
-			frappe.delete_doc("Raven Poll", self.poll_id, ignore_permissions=True, delete_permanently=True)
+			frappe.delete_doc(
+				"Raven Poll",
+				self.poll_id,
+				ignore_permissions=True,
+				delete_permanently=True,
+			)
 
 		# TEMP: this is a temp fix for the Desk interface
 		self.publish_deprecated_event_for_desk()
@@ -685,7 +700,8 @@ class RavenMessage(Document):
 
 		# delete the pinned message
 		is_pinned = frappe.get_all(
-			"Raven Pinned Messages", {"message_id": self.name, "parent": self.channel_id}
+			"Raven Pinned Messages",
+			{"message_id": self.name, "parent": self.channel_id},
 		)
 		if is_pinned:
 			channel_doc = frappe.get_doc("Raven Channel", self.channel_id)
@@ -697,6 +713,60 @@ class RavenMessage(Document):
 			if pinned_row:
 				channel_doc.remove(pinned_row)
 				channel_doc.save()
+
+	def push_message_to_omni_channel_chat_provider(self) -> None:
+		import asyncio
+
+		if self.is_customer_message or self.is_bot_message or self.message_type == "System":
+			return
+
+		channel = frappe.db.get_value(
+			doctype="Raven Channel",
+			filters=self.channel_id,
+			fieldname=["is_customer", "customer_user", "omni_channel_chat_provider"],
+			as_dict=True,
+		)
+		if not channel or not channel.is_customer:
+			return
+
+		if not channel.omni_channel_chat_provider:
+			return
+
+		omni_channel_chat_provider = frappe.get_doc(
+			"Omni Channel Chat Provider", channel.omni_channel_chat_provider
+		)
+
+		provider_user_id = frappe.db.get_value(
+			doctype="User Social Login",
+			filters={
+				"provider": omni_channel_chat_provider.provider,
+				"parent": channel.customer_user,
+			},
+			fieldname="userid",
+		)
+
+		if not provider_user_id:
+			return
+
+		message = {"text": self.content}
+
+		user = frappe.db.get_value(
+			"Raven User",
+			self.owner,
+			["full_name", "user_image"],
+			as_dict=True,
+		)
+		if user:
+			avatar_url = user.user_image
+			if avatar_url and avatar_url.startswith("/"):
+				avatar_url = frappe.utils.get_url(avatar_url)
+			message["sender"] = {
+				"name": user.full_name or None,
+				"icon_url": avatar_url or None,
+			}
+
+		provider = omni_channel_chat_provider.get_provider()
+		asyncio.run(provider.send_message(user_id=provider_user_id, message=message))
 
 
 def on_doctype_update():

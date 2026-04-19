@@ -16,14 +16,10 @@ class RavenChannel(Document):
 
 	if TYPE_CHECKING:
 		from frappe.types import DF
-
-		from raven.raven.doctype.raven_pinned_messages.raven_pinned_messages import (
-			RavenPinnedMessages,
-		)
+		from raven.raven.doctype.raven_pinned_messages.raven_pinned_messages import RavenPinnedMessages
 
 		channel_description: DF.SmallText | None
 		channel_name: DF.Data
-		chat_integration: DF.Link | None
 		customer_user: DF.Link | None
 		dm_user_1: DF.Link | None
 		dm_user_2: DF.Link | None
@@ -39,6 +35,7 @@ class RavenChannel(Document):
 		last_message_timestamp: DF.Datetime | None
 		linked_doctype: DF.Link | None
 		linked_document: DF.DynamicLink | None
+		omni_channel_chat_provider: DF.Link | None
 		openai_thread_id: DF.Data | None
 		pinned_messages: DF.Table[RavenPinnedMessages]
 		pinned_messages_string: DF.SmallText | None
