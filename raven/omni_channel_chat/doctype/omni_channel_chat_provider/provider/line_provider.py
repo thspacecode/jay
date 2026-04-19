@@ -53,16 +53,25 @@ class LineProvider(Provider[LineEvent, list[TextMessage]]):
 			)
 
 	def send_reply(self, user_id: str, message: dict, context: Any) -> None:
-		reply_token = context
+		reply_token = (context or {}).get("reply_token")
 		line_msg = LineTextMessage(text=message["text"])
 		if message.get("sender"):
 			line_msg.sender = LineSender(
 				name=message["sender"].get("name"),
 				icon_url=message["sender"].get("icon_url"),
 			)
+		if reply_token:
+			try:
+				with ApiClient(self.config) as api_client:
+					MessagingApi(api_client).reply_message(
+						ReplyMessageRequest(reply_token=reply_token, messages=[line_msg])
+					)
+				return
+			except Exception:
+				pass
 		with ApiClient(self.config) as api_client:
-			MessagingApi(api_client).reply_message(
-				ReplyMessageRequest(reply_token=reply_token, messages=[line_msg])
+			MessagingApi(api_client).push_message(
+				PushMessageRequest(to=user_id, messages=[line_msg])
 			)
 
 	def send_message(self, user_id: str, message: dict) -> None:

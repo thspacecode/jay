@@ -35,9 +35,7 @@ class RavenMessage(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
-		from raven.raven_messaging.doctype.raven_mention.raven_mention import (
-			RavenMention,
-		)
+		from raven.raven_messaging.doctype.raven_mention.raven_mention import RavenMention
 
 		blurhash: DF.SmallText | None
 		bot: DF.Link | None
@@ -63,6 +61,7 @@ class RavenMessage(Document):
 		message_reactions: DF.JSON | None
 		message_type: DF.Literal["Text", "Image", "File", "Poll", "System"]
 		notification: DF.Data | None
+		omni_channel_msg_meta: DF.JSON | None
 		poll_id: DF.Link | None
 		replied_message_details: DF.JSON | None
 		text: DF.LongText | None
@@ -715,55 +714,9 @@ class RavenMessage(Document):
 				channel_doc.save()
 
 	def push_message_to_omni_channel_chat_provider(self) -> None:
-		if self.is_customer_message or self.is_bot_message or self.message_type == "System":
-			return
+		from raven.omni_channel_chat.webhook_handler import OmniChannelConnector
 
-		channel = frappe.db.get_value(
-			doctype="Raven Channel",
-			filters=self.channel_id,
-			fieldname=["is_customer", "customer_user", "omni_channel_chat_provider"],
-			as_dict=True,
-			cache=True,
-		)
-
-		if not channel or not channel.is_customer or not channel.omni_channel_chat_provider:
-			return
-
-		omni_channel_chat_provider = frappe.get_doc(
-			"Omni Channel Chat Provider", channel.omni_channel_chat_provider
-		)
-
-		provider_user_id = frappe.db.get_value(
-			doctype="User Social Login",
-			filters={
-				"provider": omni_channel_chat_provider.provider,
-				"parent": channel.customer_user,
-			},
-			fieldname="userid",
-		)
-
-		if not provider_user_id:
-			return
-
-		message = {"text": self.content}
-
-		user = frappe.db.get_value(
-			"Raven User",
-			self.owner,
-			["full_name", "user_image"],
-			as_dict=True,
-		)
-		if user:
-			avatar_url = user.user_image
-			if avatar_url and avatar_url.startswith("/"):
-				avatar_url = frappe.utils.get_url(avatar_url)
-			message["sender"] = {
-				"name": user.full_name or None,
-				"icon_url": avatar_url or None,
-			}
-
-		provider = omni_channel_chat_provider.get_provider()
-		provider.send_message(user_id=provider_user_id, message=message)
+		OmniChannelConnector.push_to_provider(raven_message=self)
 
 
 def on_doctype_update():
