@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
-from raven.omni_channel_chat.webhook_handler import OmniChannelConnector
+from raven.omni_channel_chat.omni_channel_raven_connector import OmniChannelRavenConnector
 
 if TYPE_CHECKING:
 	from raven.omni_channel_chat.doctype.omni_channel_chat_provider.omni_channel_chat_provider import (
@@ -17,7 +17,7 @@ class Provider[ProviderWebhookEvent, ProviderMessageObject](ABC):
 		self.provider_config.decode_password_field()
 
 	def push_message_to_raven(self, messages: list[dict]) -> None:
-		handler = OmniChannelConnector(provider=self)
+		handler = OmniChannelRavenConnector(provider=self)
 		for message in messages:
 			handler.receive_from_provider(message)
 

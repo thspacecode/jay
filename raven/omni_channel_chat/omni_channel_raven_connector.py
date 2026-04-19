@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 	from raven.raven_messaging.doctype.raven_message.raven_message import RavenMessage
 
 
-class OmniChannelConnector:
+class OmniChannelRavenConnector:
 	"""Bridges Raven and an external omni-channel provider.
 
 	Two main interfaces:
@@ -193,7 +193,11 @@ class OmniChannelConnector:
 		Does nothing if the message is from a customer, a bot, or is a system message,
 		or if the channel is not an omni-channel customer channel.
 		"""
-		if raven_message.is_customer_message or raven_message.is_bot_message or raven_message.message_type == "System":
+		if (
+			raven_message.is_customer_message
+			or raven_message.is_bot_message
+			or raven_message.message_type == "System"
+		):
 			return
 
 		channel = cast(
@@ -210,12 +214,17 @@ class OmniChannelConnector:
 		if not channel or not channel["is_customer"] or not channel["omni_channel_chat_provider"]:
 			return
 
-		provider_config = frappe.get_doc("Omni Channel Chat Provider", channel["omni_channel_chat_provider"])
+		provider_config = frappe.get_doc(
+			"Omni Channel Chat Provider", channel["omni_channel_chat_provider"]
+		)
 		connector = cls(provider=provider_config.get_provider())
 
 		user_id = frappe.db.get_value(
 			doctype="User Social Login",
-			filters={"provider": connector.chat_integration.provider, "parent": channel["customer_user"]},
+			filters={
+				"provider": connector.chat_integration.provider,
+				"parent": channel["customer_user"],
+			},
 			fieldname="userid",
 		)
 		if not user_id:
@@ -225,7 +234,9 @@ class OmniChannelConnector:
 
 		sender = cast(
 			"dict | None",
-			frappe.db.get_value("Raven User", raven_message.owner, ["full_name", "user_image"], as_dict=True),
+			frappe.db.get_value(
+				"Raven User", raven_message.owner, ["full_name", "user_image"], as_dict=True
+			),
 		)
 		if sender:
 			avatar_url = cast("str | None", sender["user_image"])
@@ -249,7 +260,3 @@ class OmniChannelConnector:
 		)
 
 		connector.provider.send_reply(user_id=str(user_id), message=message, context=context)
-
-
-# Backwards-compatibility alias — remove once all call-sites are updated.
-WebhookHandler = OmniChannelConnector

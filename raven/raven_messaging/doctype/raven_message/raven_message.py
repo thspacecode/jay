@@ -714,9 +714,9 @@ class RavenMessage(Document):
 				channel_doc.save()
 
 	def push_message_to_omni_channel_chat_provider(self) -> None:
-		from raven.omni_channel_chat.webhook_handler import OmniChannelConnector
+		from raven.omni_channel_chat.omni_channel_raven_connector import OmniChannelRavenConnector
 
-		OmniChannelConnector.push_to_provider(raven_message=self)
+		OmniChannelRavenConnector.push_to_provider(raven_message=self)
 
 
 def on_doctype_update():
