@@ -715,8 +715,6 @@ class RavenMessage(Document):
 				channel_doc.save()
 
 	def push_message_to_omni_channel_chat_provider(self) -> None:
-		import asyncio
-
 		if self.is_customer_message or self.is_bot_message or self.message_type == "System":
 			return
 
@@ -766,7 +764,7 @@ class RavenMessage(Document):
 			}
 
 		provider = omni_channel_chat_provider.get_provider()
-		asyncio.run(provider.send_message(user_id=provider_user_id, message=message))
+		provider.send_message(user_id=provider_user_id, message=message)
 
 
 def on_doctype_update():

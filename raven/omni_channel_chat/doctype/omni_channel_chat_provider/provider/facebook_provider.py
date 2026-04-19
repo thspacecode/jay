@@ -29,9 +29,9 @@ class FacebookProvider(Provider[FacebookMessagingEvent, dict]):
 		expected = hmac.new(self._app_secret.encode(), body, hashlib.sha256).hexdigest()
 		return hmac.compare_digest(expected, signature_header.removeprefix("sha256="))
 
-	async def get_user_info(self, user_id: str) -> dict:
-		async with httpx.AsyncClient() as client:
-			response = await client.get(
+	def get_user_info(self, user_id: str) -> dict:
+		with httpx.Client() as client:
+			response = client.get(
 				f"https://graph.facebook.com/{user_id}",
 				params={
 					"fields": "name,picture",
@@ -46,20 +46,20 @@ class FacebookProvider(Provider[FacebookMessagingEvent, dict]):
 				"picture_url": data.get("picture", {}).get("data", {}).get("url"),
 			}
 
-	async def show_typing(self, user_id: str) -> None:
-		async with httpx.AsyncClient() as client:
-			await client.post(
+	def show_typing(self, user_id: str) -> None:
+		with httpx.Client() as client:
+			client.post(
 				self.FB_API_URL,
 				params={"access_token": self._page_access_token},
 				json={"recipient": {"id": user_id}, "sender_action": "typing_on"},
 			)
 
-	async def send_reply(self, user_id: str, message: dict, context: Any) -> None:
-		await self.send_message(user_id=user_id, message=message)
+	def send_reply(self, user_id: str, message: dict, context: Any) -> None:
+		self.send_message(user_id=user_id, message=message)
 
-	async def send_message(self, user_id: str, message: dict) -> None:
-		async with httpx.AsyncClient() as client:
-			await client.post(
+	def send_message(self, user_id: str, message: dict) -> None:
+		with httpx.Client() as client:
+			client.post(
 				self.FB_API_URL,
 				params={"access_token": self._page_access_token},
 				json={
@@ -68,7 +68,7 @@ class FacebookProvider(Provider[FacebookMessagingEvent, dict]):
 				},
 			)
 
-	async def event_mapper(self, event: FacebookMessagingEvent) -> dict | None:
+	def event_mapper(self, event: FacebookMessagingEvent) -> dict | None:
 		message = event.get("message")
 		if message is None or "text" not in message:
 			return None
@@ -79,15 +79,15 @@ class FacebookProvider(Provider[FacebookMessagingEvent, dict]):
 			"message_metadata": {"mid": message.get("mid")},
 		}
 
-	async def standardize_events(self, events: list[FacebookMessagingEvent]) -> list[dict]:
+	def standardize_events(self, events: list[FacebookMessagingEvent]) -> list[dict]:
 		std_events: list[dict] = []
 		for event in events:
-			std_event = await self.event_mapper(event)
+			std_event = self.event_mapper(event)
 			if std_event:
 				std_events.append(std_event)
 		return std_events
 
-	async def extract_messages(self, body: bytes, headers: dict) -> list[dict]:
+	def extract_messages(self, body: bytes, headers: dict) -> list[dict]:
 		signature = headers.get("X-Hub-Signature-256", "") or headers.get(
 			"x-hub-signature-256", ""
 		)
@@ -103,4 +103,4 @@ class FacebookProvider(Provider[FacebookMessagingEvent, dict]):
 			for entry in payload.get("entry", [])
 			for messaging_event in entry.get("messaging", [])
 		]
-		return await self.standardize_events(messaging_events)
+		return self.standardize_events(messaging_events)

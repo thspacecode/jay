@@ -1,5 +1,3 @@
-import asyncio
-
 import frappe
 from werkzeug.wrappers import Response
 
@@ -35,7 +33,7 @@ def line() -> dict:
 
 	omni_channel_chat = get_omni_channel_chat(slug=slug)
 	provider = omni_channel_chat.get_provider()
-	asyncio.run(provider.handle_webhook(body=body, headers=headers))
+	provider.handle_webhook(body=body, headers=headers)
 	return {"status": "ok"}
 
 
@@ -60,5 +58,5 @@ def facebook() -> dict | Response | None:
 	body: bytes = request.get_data()
 	headers: dict = dict(request.headers)
 
-	asyncio.run(provider.handle_webhook(body=body, headers=headers))
+	provider.handle_webhook(body=body, headers=headers)
 	return {"status": "ok"}

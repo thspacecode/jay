@@ -66,7 +66,7 @@ def get_customer_user(
 	return user
 
 
-async def get_raven_user(
+def get_raven_user(
 	*,
 	provider: "Provider",
 	user: "User",
@@ -83,7 +83,7 @@ async def get_raven_user(
 	if raven_user_pk:
 		raven_user = frappe.get_doc("Raven User", raven_user_pk)
 	else:
-		user_info = await provider.get_user_info(
+		user_info = provider.get_user_info(
 			user_id=user_id,
 		)
 
@@ -152,7 +152,7 @@ def create_message(
 	doc.insert(ignore_permissions=True)
 
 
-async def handle_incoming_webhook_message(
+def handle_incoming_webhook_message(
 	*,
 	provider: "Provider",
 	message: dict,
@@ -165,7 +165,7 @@ async def handle_incoming_webhook_message(
 
 	frappe.set_user(user.name)
 
-	raven_user = await get_raven_user(provider=provider, user=user, user_id=message["user_id"])
+	raven_user = get_raven_user(provider=provider, user=user, user_id=message["user_id"])
 	raven_channel = get_raven_channel(chat_integration=chat_integration, raven_user=raven_user)
 	create_message(raven_channel=raven_channel, message=message)
 

@@ -37,7 +37,7 @@ class LineProvider(Provider[LineEvent, list[TextMessage]]):
 			channel_secret=self.provider_config.line_channel_secret,
 		)
 
-	async def get_user_info(self, user_id: str) -> dict:
+	def get_user_info(self, user_id: str) -> dict:
 		with ApiClient(self.config) as api_client:
 			profile = MessagingApi(api_client).get_profile(user_id)
 			return {
@@ -46,13 +46,13 @@ class LineProvider(Provider[LineEvent, list[TextMessage]]):
 				"picture_url": profile.picture_url,
 			}
 
-	async def show_typing(self, user_id: str) -> None:
+	def show_typing(self, user_id: str) -> None:
 		with ApiClient(self.config) as api_client:
 			MessagingApi(api_client).show_loading_animation(
 				ShowLoadingAnimationRequest(chatId=user_id, loadingSeconds=60)
 			)
 
-	async def send_reply(self, user_id: str, message: dict, context: Any) -> None:
+	def send_reply(self, user_id: str, message: dict, context: Any) -> None:
 		reply_token = context
 		line_msg = LineTextMessage(text=message["text"])
 		if message.get("sender"):
@@ -65,7 +65,7 @@ class LineProvider(Provider[LineEvent, list[TextMessage]]):
 				ReplyMessageRequest(reply_token=reply_token, messages=[line_msg])
 			)
 
-	async def send_message(self, user_id: str, message: dict) -> None:
+	def send_message(self, user_id: str, message: dict) -> None:
 		line_msg = LineTextMessage(text=message["text"])
 		if message.get("sender"):
 			line_msg.sender = LineSender(
@@ -80,7 +80,7 @@ class LineProvider(Provider[LineEvent, list[TextMessage]]):
 				)
 			)
 
-	async def event_mapper(self, event: LineEvent) -> dict | None:
+	def event_mapper(self, event: LineEvent) -> dict | None:
 		if not isinstance(event, LineMessageEvent):
 			return None
 
@@ -97,18 +97,18 @@ class LineProvider(Provider[LineEvent, list[TextMessage]]):
 			}
 		return None
 
-	async def standardize_events(self, events: list[LineEvent]) -> list[dict]:
+	def standardize_events(self, events: list[LineEvent]) -> list[dict]:
 		std_events: list[dict] = []
 		for event in events:
-			std_event = await self.event_mapper(event)
+			std_event = self.event_mapper(event)
 			if std_event:
 				std_events.append(std_event)
 		return std_events
 
-	async def extract_messages(self, body: bytes, headers: dict) -> list[dict]:
+	def extract_messages(self, body: bytes, headers: dict) -> list[dict]:
 		signature = headers.get("x-line-signature", "") or headers.get("X-Line-Signature", "")
 		try:
 			events = self.parser.parse(body=body.decode(), signature=signature, as_payload=False)
 		except InvalidSignatureError:
 			frappe.throw("Invalid LINE signature", frappe.PermissionError)
-		return await self.standardize_events(events)
+		return self.standardize_events(events)
