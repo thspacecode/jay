@@ -53,5 +53,10 @@ class OmniChannelChatProvider(Document):
 			frappe.throw(_("Provider not implemented."))
 
 
-def get_omni_channel_chat(slug: str) -> OmniChannelChatProvider:
-	return frappe.get_doc("Omni Channel Chat Provider", slug)
+def get_omni_channel_chat_provider(slug: str) -> Provider:
+	doc = frappe.get_doc("Omni Channel Chat Provider", slug)
+
+	if not doc:
+		frappe.throw(_("Omni Channel Chat Provider not found."))
+
+	return doc.get_provider()

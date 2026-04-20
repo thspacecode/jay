@@ -23,13 +23,14 @@ class Provider[ProviderWebhookEvent, ProviderMessageObject](ABC):
 		for message in messages:
 			handler.receive_from_provider(message)
 
-	def handle_webhook(self, body: bytes, headers: dict) -> None:
+	def handle_webhook(self, body: bytes, headers: dict) -> Response:
 		messages = self.extract_messages(body=body, headers=headers)
 		self.push_message_to_raven(messages=messages)
+		return Response("ok", status=200, content_type="text/plain")
 
 	@abstractmethod
 	def handle_frappe_api(self) -> Response:
-		"""Extract data from frappe request and pass to handle webhook."""
+		"""Extract data from frappe request and pass to `handle_webhook`."""
 
 	@abstractmethod
 	def get_user_info(self, user_id: str) -> dict:

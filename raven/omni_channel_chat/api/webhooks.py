@@ -2,7 +2,7 @@ import frappe
 from werkzeug.wrappers import Response
 
 from raven.omni_channel_chat.doctype.omni_channel_chat_provider.omni_channel_chat_provider import (
-	get_omni_channel_chat,
+	get_omni_channel_chat_provider,
 )
 
 
@@ -26,7 +26,10 @@ def extract_provider_slug() -> str:
 
 @frappe.whitelist(allow_guest=True, methods=["POST", "GET"])
 def handle() -> Response:
+	"""
+	Endpoint:
+		/api/method/raven.omni_channel_chat.api.webhooks.handle
+	"""
 	slug = extract_provider_slug()
-	omni_channel_chat = get_omni_channel_chat(slug=slug)
-	provider = omni_channel_chat.get_provider()
+	provider = get_omni_channel_chat_provider(slug=slug)
 	return provider.handle_frappe_api()
