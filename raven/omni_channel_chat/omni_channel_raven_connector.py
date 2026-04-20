@@ -169,17 +169,30 @@ class OmniChannelRavenConnector:
 		return raven_channel
 
 	def _save_inbound_message(self, *, raven_channel: "RavenChannel", message: dict) -> None:
+		msg = message["message"]
 		doc = frappe.new_doc(doctype="Raven Message")
 		doc.update(
 			{
 				"channel_id": raven_channel.name,
-				"message_type": message["message"]["type"],
-				"text": message["message"]["text"],
+				"message_type": msg["type"],
 				"is_customer_message": True,
 				"owner": raven_channel.customer_user,
 				"omni_channel_msg_meta": message.get("message_metadata"),
 			}
 		)
+		if msg["type"] == "Text":
+			doc.text = msg["text"]
+		elif msg["type"] in ("Image", "File"):
+			file_doc = frappe.get_doc(
+				{
+					"doctype": "File",
+					"file_name": msg["file_name"],
+					"content": msg["file_content"],
+					"is_private": 0,
+				}
+			)
+			file_doc.insert(ignore_permissions=True)
+			doc.file = file_doc.file_url
 		doc.insert(ignore_permissions=True)
 
 	# ── interface 2: Raven → provider (outbound) ────────────────────────────

@@ -87,16 +87,54 @@ class FacebookProvider(Provider[FacebookMessagingEvent, dict]):
 				},
 			)
 
+	def _download_attachment(self, url: str, default_name: str) -> tuple[bytes, str]:
+		with httpx.Client() as client:
+			response = client.get(url)
+			response.raise_for_status()
+			content_disposition = response.headers.get("content-disposition", "")
+			file_name = default_name
+			if "filename=" in content_disposition:
+				file_name = content_disposition.split("filename=")[-1].strip('" ')
+			return response.content, file_name
+
 	def event_mapper(self, event: FacebookMessagingEvent) -> dict | None:
 		message = event.get("message")
-		if message is None or "text" not in message:
+		if message is None:
 			return None
-		return {
-			"provider": self.provider_config.provider,
-			"user_id": event["sender"]["id"],
-			"message": {"type": "Text", "text": message["text"]},
-			"message_metadata": {"mid": message.get("mid")},
-		}
+
+		mid = message.get("mid")
+
+		if "text" in message:
+			return {
+				"provider": self.provider_config.provider,
+				"user_id": event["sender"]["id"],
+				"message": {"type": "Text", "text": message["text"]},
+				"message_metadata": {"mid": mid},
+			}
+
+		for attachment in message.get("attachments") or []:
+			att_type = attachment.get("type")
+			url = attachment.get("payload", {}).get("url")
+			if not url:
+				continue
+			if att_type == "image":
+				content, file_name = self._download_attachment(url, f"{mid or 'image'}.jpg")
+				return {
+					"provider": self.provider_config.provider,
+					"user_id": event["sender"]["id"],
+					"message": {"type": "Image", "file_name": file_name, "file_content": content},
+					"message_metadata": {"mid": mid},
+				}
+			if att_type in ("file", "document"):
+				content, file_name = self._download_attachment(url, mid or "file")
+				return {
+					"provider": self.provider_config.provider,
+					"user_id": event["sender"]["id"],
+					"message": {"type": "File", "file_name": file_name, "file_content": content},
+					"message_metadata": {"mid": mid},
+				}
+
+		return None
 
 	def standardize_events(self, events: list[FacebookMessagingEvent]) -> list[dict]:
 		std_events: list[dict] = []

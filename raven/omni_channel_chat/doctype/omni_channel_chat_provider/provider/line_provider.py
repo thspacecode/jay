@@ -6,6 +6,7 @@ from linebot.v3.messaging import (
 	ApiClient,
 	Configuration,
 	MessagingApi,
+	MessagingApiBlob,
 	PushMessageRequest,
 	ReplyMessageRequest,
 	ShowLoadingAnimationRequest,
@@ -17,6 +18,7 @@ from linebot.v3.messaging import (
 from linebot.v3.messaging import TextMessage as LineTextMessage
 from linebot.v3.webhook import WebhookParser
 from linebot.v3.webhooks import Event as LineEvent
+from linebot.v3.webhooks import FileMessageContent, ImageMessageContent
 from linebot.v3.webhooks import MessageEvent as LineMessageEvent
 from linebot.v3.webhooks import TextMessageContent
 
@@ -95,21 +97,49 @@ class LineProvider(Provider[LineEvent, list[TextMessage]]):
 				)
 			)
 
+	def _download_line_content(self, message_id: str) -> bytes:
+		with ApiClient(self.config) as api_client:
+			return bytes(MessagingApiBlob(api_client).get_message_content(message_id))
+
 	def event_mapper(self, event: LineEvent) -> dict | None:
 		if not isinstance(event, LineMessageEvent):
 			return None
 
 		msg = event.message
+		metadata = {"message_id": msg.id, "reply_token": event.reply_token}
+
 		if isinstance(msg, TextMessageContent):
 			return {
 				"provider": self.provider_config.provider,
 				"user_id": event.source.user_id,
 				"message": {"type": "Text", "text": msg.text},
-				"message_metadata": {
-					"message_id": msg.id,
-					"reply_token": event.reply_token,
-				},
+				"message_metadata": metadata,
 			}
+
+		if isinstance(msg, ImageMessageContent):
+			return {
+				"provider": self.provider_config.provider,
+				"user_id": event.source.user_id,
+				"message": {
+					"type": "Image",
+					"file_name": f"{msg.id}.jpg",
+					"file_content": self._download_line_content(msg.id),
+				},
+				"message_metadata": metadata,
+			}
+
+		if isinstance(msg, FileMessageContent):
+			return {
+				"provider": self.provider_config.provider,
+				"user_id": event.source.user_id,
+				"message": {
+					"type": "File",
+					"file_name": msg.file_name,
+					"file_content": self._download_line_content(msg.id),
+				},
+				"message_metadata": metadata,
+			}
+
 		return None
 
 	def standardize_events(self, events: list[LineEvent]) -> list[dict]:
