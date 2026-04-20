@@ -3,6 +3,8 @@ from typing import TYPE_CHECKING, cast
 import frappe
 from frappe.utils import get_url
 
+from raven.omni_channel_chat.models.messages import StdMessage
+
 if TYPE_CHECKING:
 	from frappe.core.doctype.user.user import User
 
@@ -151,7 +153,7 @@ class OmniChannelRavenConnector:
 		for message in messages:
 			self.receive_from_provider(message)
 
-	def receive_from_provider(self, message: dict) -> "RavenChannel":
+	def receive_from_provider(self, message: StdMessage) -> "RavenChannel":
 		"""Inbound: turn a provider webhook payload into a Raven message.
 
 		Creates the Frappe user, Raven user, and channel on first contact,
@@ -159,17 +161,17 @@ class OmniChannelRavenConnector:
 
 		Returns the Raven channel the message was posted to.
 		"""
-		user = self._get_or_create_customer_user(user_id=message["user_id"])
+		user = self._get_or_create_customer_user(user_id=message.user_id)
 		frappe.set_user(user.name)
 
-		raven_user = self._get_or_create_raven_user(user=user, user_id=message["user_id"])
+		raven_user = self._get_or_create_raven_user(user=user, user_id=message.user_id)
 		raven_channel = self._get_or_create_channel(raven_user=raven_user)
 		self._save_inbound_message(raven_channel=raven_channel, message=message)
 
 		return raven_channel
 
-	def _save_inbound_message(self, *, raven_channel: "RavenChannel", message: dict) -> None:
-		msg = message["message"]
+	def _save_inbound_message(self, *, raven_channel: "RavenChannel", message: StdMessage) -> None:
+		msg = message.to_raven()
 		doc = frappe.new_doc(doctype="Raven Message")
 		doc.update(
 			{
@@ -177,7 +179,7 @@ class OmniChannelRavenConnector:
 				"message_type": msg["type"],
 				"is_customer_message": True,
 				"owner": raven_channel.customer_user,
-				"omni_channel_msg_meta": message.get("message_metadata"),
+				"omni_channel_msg_meta": message.metadata,
 			}
 		)
 		if msg["type"] == "Text":

@@ -23,6 +23,13 @@ from linebot.v3.webhooks import Event as LineEvent
 from linebot.v3.webhooks import FileMessageContent, ImageMessageContent, TextMessageContent
 from linebot.v3.webhooks import MessageEvent as LineMessageEvent
 
+from raven.omni_channel_chat.models.messages import (
+	FileMessage,
+	ImageMessage,
+	StdMessage,
+	TextMessage as StdTextMessage,
+)
+
 from . import Provider
 
 
@@ -121,56 +128,44 @@ class LineProvider(Provider[LineEvent, list[TextMessage]]):
 		with ApiClient(self.config) as api_client:
 			return bytes(MessagingApiBlob(api_client).get_message_content(message_id))
 
-	def event_mapper(self, event: LineEvent) -> dict | None:
+	def event_mapper(self, event: LineEvent) -> StdMessage | None:
 		if not isinstance(event, LineMessageEvent):
 			return None
 
 		msg = event.message
 		metadata = {"message_id": msg.id, "reply_token": event.reply_token}
+		user_id = event.source.user_id
 
 		if isinstance(msg, TextMessageContent):
-			return {
-				"provider": self.provider_config.provider,
-				"user_id": event.source.user_id,
-				"message": {"type": "Text", "text": msg.text},
-				"message_metadata": metadata,
-			}
+			return StdTextMessage(user_id=user_id, metadata=metadata, text=msg.text)
 
 		if isinstance(msg, ImageMessageContent):
-			return {
-				"provider": self.provider_config.provider,
-				"user_id": event.source.user_id,
-				"message": {
-					"type": "Image",
-					"file_name": f"{msg.id}.jpg",
-					"file_content": self._download_line_content(msg.id),
-				},
-				"message_metadata": metadata,
-			}
+			return ImageMessage(
+				user_id=user_id,
+				metadata=metadata,
+				file_name=f"{msg.id}.jpg",
+				file_content=self._download_line_content(msg.id),
+			)
 
 		if isinstance(msg, FileMessageContent):
-			return {
-				"provider": self.provider_config.provider,
-				"user_id": event.source.user_id,
-				"message": {
-					"type": "File",
-					"file_name": msg.file_name,
-					"file_content": self._download_line_content(msg.id),
-				},
-				"message_metadata": metadata,
-			}
+			return FileMessage(
+				user_id=user_id,
+				metadata=metadata,
+				file_name=msg.file_name,
+				file_content=self._download_line_content(msg.id),
+			)
 
 		return None
 
-	def standardize_events(self, events: list[LineEvent]) -> list[dict]:
-		std_events: list[dict] = []
+	def standardize_events(self, events: list[LineEvent]) -> list[StdMessage]:
+		std_events: list[StdMessage] = []
 		for event in events:
 			std_event = self.event_mapper(event)
 			if std_event:
 				std_events.append(std_event)
 		return std_events
 
-	def extract_messages(self, body: bytes, headers: dict) -> list[dict]:
+	def extract_messages(self, body: bytes, headers: dict) -> list[StdMessage]:
 		signature = headers.get("x-line-signature", "") or headers.get("X-Line-Signature", "")
 		try:
 			events = self.parser.parse(body=body.decode(), signature=signature, as_payload=False)
