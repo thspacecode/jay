@@ -7,8 +7,9 @@ class StdMessage(ABC):
 	user_id: str
 	metadata: dict
 
+	@property
 	@abstractmethod
-	def to_raven(self) -> dict:
+	def type(self) -> str:
 		pass
 
 
@@ -16,11 +17,9 @@ class StdMessage(ABC):
 class TextMessage(StdMessage):
 	text: str
 
-	def to_raven(self):
-		return {
-			"type": "Text",
-			"text": self.text,
-		}
+	@property
+	def type(self) -> str:
+		return "Text"
 
 
 @dataclass
@@ -28,12 +27,9 @@ class FileMessage(StdMessage):
 	file_name: str
 	file_content: bytes
 
-	def to_raven(self):
-		return {
-			"type": "File",
-			"file_name": self.file_name,
-			"file_content": self.file_content,
-		}
+	@property
+	def type(self) -> str:
+		return "File"
 
 
 @dataclass
@@ -41,9 +37,6 @@ class ImageMessage(StdMessage):
 	file_name: str
 	file_content: bytes
 
-	def to_raven(self):
-		return {
-			"type": "Image",
-			"file_name": self.file_name,
-			"file_content": self.file_content,
-		}
+	@property
+	def type(self) -> str:
+		return "Image"

@@ -171,25 +171,26 @@ class OmniChannelRavenConnector:
 		return raven_channel
 
 	def _save_inbound_message(self, *, raven_channel: "RavenChannel", message: StdMessage) -> None:
-		msg = message.to_raven()
+		from raven.omni_channel_chat.models.messages import FileMessage, ImageMessage, TextMessage
+
 		doc = frappe.new_doc(doctype="Raven Message")
 		doc.update(
 			{
 				"channel_id": raven_channel.name,
-				"message_type": msg["type"],
+				"message_type": message.type,
 				"is_customer_message": True,
 				"owner": raven_channel.customer_user,
 				"omni_channel_msg_meta": message.metadata,
 			}
 		)
-		if msg["type"] == "Text":
-			doc.text = msg["text"]
-		elif msg["type"] in ("Image", "File"):
+		if isinstance(message, TextMessage):
+			doc.text = message.text
+		elif isinstance(message, (ImageMessage, FileMessage)):
 			file_doc = frappe.get_doc(
 				{
 					"doctype": "File",
-					"file_name": msg["file_name"],
-					"content": msg["file_content"],
+					"file_name": message.file_name,
+					"content": message.file_content,
 					"is_private": 0,
 				}
 			)
