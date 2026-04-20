@@ -37,6 +37,12 @@ class LineProvider(Provider[LineEvent, list[TextMessage]]):
 			channel_secret=self.provider_config.line_channel_secret,
 		)
 
+	def handle_frappe_api(self):
+		request = frappe.local.request
+		body: bytes = request.get_data()
+		headers: dict = dict(request.headers)
+		return self.handle_webhook(body=body, headers=headers)
+
 	def get_user_info(self, user_id: str) -> dict:
 		with ApiClient(self.config) as api_client:
 			profile = MessagingApi(api_client).get_profile(user_id)

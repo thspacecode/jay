@@ -5,6 +5,7 @@ from typing import Any
 
 import frappe
 import httpx
+from werkzeug.wrappers import Response
 
 from raven.omni_channel_chat.doctype.omni_channel_chat_provider.provider import (
 	Provider,
@@ -22,6 +23,24 @@ class FacebookProvider(Provider[FacebookMessagingEvent, dict]):
 		self._page_access_token = self.provider_config.fb_page_access_token
 		self._app_secret = self.provider_config.fb_app_secret
 		self._verify_token = self.provider_config.fb_verify_token
+
+	def handle_frappe_api(self):
+		request = frappe.local.request
+
+		if request.method == "GET":
+			mode = frappe.form_dict.get("hub.mode")
+			verify_token = frappe.form_dict.get("hub.verify_token")
+			challenge = frappe.form_dict.get("hub.challenge", "0")
+
+			if mode == "subscribe" and verify_token == self._verify_token:
+				return Response(challenge, status=200, content_type="text/plain")
+			else:
+				frappe.throw("Verification failed", frappe.PermissionError)
+
+		body: bytes = request.get_data()
+		headers: dict = dict(request.headers)
+
+		return self.handle_webhook(body=body, headers=headers)
 
 	def _verify_signature(self, body: bytes, signature_header: str) -> bool:
 		if not signature_header.startswith("sha256="):

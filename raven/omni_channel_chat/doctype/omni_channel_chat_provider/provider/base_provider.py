@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
+from werkzeug.wrappers import Response
+
 from raven.omni_channel_chat.omni_channel_raven_connector import OmniChannelRavenConnector
 
 if TYPE_CHECKING:
@@ -24,6 +26,10 @@ class Provider[ProviderWebhookEvent, ProviderMessageObject](ABC):
 	def handle_webhook(self, body: bytes, headers: dict) -> None:
 		messages = self.extract_messages(body=body, headers=headers)
 		self.push_message_to_raven(messages=messages)
+
+	@abstractmethod
+	def handle_frappe_api(self) -> Response:
+		"""Extract data from frappe request and pass to handle webhook."""
 
 	@abstractmethod
 	def get_user_info(self, user_id: str) -> dict:
