@@ -5,6 +5,8 @@ from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
 	ApiClient,
 	Configuration,
+	ImageMessage,
+	Message,
 	MessagingApi,
 	MessagingApiBlob,
 	PushMessageRequest,
@@ -18,9 +20,8 @@ from linebot.v3.messaging import (
 from linebot.v3.messaging import TextMessage as LineTextMessage
 from linebot.v3.webhook import WebhookParser
 from linebot.v3.webhooks import Event as LineEvent
-from linebot.v3.webhooks import FileMessageContent, ImageMessageContent
+from linebot.v3.webhooks import FileMessageContent, ImageMessageContent, TextMessageContent
 from linebot.v3.webhooks import MessageEvent as LineMessageEvent
-from linebot.v3.webhooks import TextMessageContent
 
 from . import Provider
 
@@ -60,14 +61,42 @@ class LineProvider(Provider[LineEvent, list[TextMessage]]):
 				ShowLoadingAnimationRequest(chatId=user_id, loadingSeconds=60)
 			)
 
-	def send_reply(self, user_id: str, message: dict, context: Any) -> None:
-		reply_token = (context or {}).get("reply_token")
-		line_msg = LineTextMessage(text=message["text"])
+	@staticmethod
+	def _to_https(url: str) -> str:
+		if url and url.startswith("http://"):
+			return "https://" + url[7:]
+		return url
+
+	def _build_outbound_message(self, message: dict) -> Message:
+		sender = None
 		if message.get("sender"):
-			line_msg.sender = LineSender(
+			sender = LineSender(
 				name=message["sender"].get("name"),
 				icon_url=message["sender"].get("icon_url"),
 			)
+		msg_type = message.get("type", "Text")
+		if msg_type == "Image":
+			file_url = self._to_https(message["file_url"])
+			print(file_url)
+			img_msg = ImageMessage(
+				original_content_url=file_url,
+				preview_image_url=file_url,
+			)
+			if sender:
+				img_msg.sender = sender
+			return img_msg
+		# File falls back to a text link (LINE Messaging API has no outbound file type)
+		text = (
+			self._to_https(message["file_url"]) if msg_type == "File" else message.get("text", "")
+		)
+		line_msg = LineTextMessage(text=text)
+		if sender:
+			line_msg.sender = sender
+		return line_msg
+
+	def send_reply(self, user_id: str, message: dict, context: Any) -> None:
+		reply_token = (context or {}).get("reply_token")
+		line_msg = self._build_outbound_message(message)
 		if reply_token:
 			try:
 				with ApiClient(self.config) as api_client:
@@ -83,18 +112,9 @@ class LineProvider(Provider[LineEvent, list[TextMessage]]):
 			)
 
 	def send_message(self, user_id: str, message: dict) -> None:
-		line_msg = LineTextMessage(text=message["text"])
-		if message.get("sender"):
-			line_msg.sender = LineSender(
-				name=message["sender"].get("name"),
-				icon_url=message["sender"].get("icon_url"),
-			)
 		with ApiClient(self.config) as api_client:
 			MessagingApi(api_client).push_message(
-				PushMessageRequest(
-					to=user_id,
-					messages=[line_msg],
-				)
+				PushMessageRequest(to=user_id, messages=[self._build_outbound_message(message)])
 			)
 
 	def _download_line_content(self, message_id: str) -> bytes:

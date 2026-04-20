@@ -209,7 +209,7 @@ class OmniChannelRavenConnector:
 		if (
 			raven_message.is_customer_message
 			or raven_message.is_bot_message
-			or raven_message.message_type == "System"
+			or raven_message.message_type in ("System", "Poll")
 		):
 			return
 
@@ -243,7 +243,14 @@ class OmniChannelRavenConnector:
 		if not user_id:
 			return
 
-		message: dict = {"text": raven_message.content}
+		message: dict = {"type": raven_message.message_type}
+		if raven_message.message_type == "Text":
+			message["text"] = raven_message.content
+		elif raven_message.message_type in ("Image", "File"):
+			file_url = raven_message.file
+			if file_url and file_url.startswith("/"):
+				file_url = get_url(file_url)
+			message["file_url"] = file_url
 
 		sender = cast(
 			"dict | None",

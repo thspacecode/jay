@@ -217,7 +217,10 @@ class RavenMessage(Document):
 			self.handle_ai_message()
 
 		self.send_push_notification()
-		self.push_message_to_omni_channel_chat_provider()
+		# For file/image messages, the file isn't attached until after insert (upload_file_with_message flow).
+		# The push will happen in on_update once the file field is populated.
+		if not (self.message_type in ("Image", "File") and not self.file):
+			self.push_message_to_omni_channel_chat_provider()
 
 	def handle_ai_message(self):
 
@@ -687,6 +690,8 @@ class RavenMessage(Document):
 			if self.message_type == "File" or self.message_type == "Image":
 				if self.file:
 					self.handle_ai_message()
+					if self.has_value_changed("file"):
+						self.push_message_to_omni_channel_chat_provider()
 
 	def on_trash(self):
 		# delete all the reactions for the message
