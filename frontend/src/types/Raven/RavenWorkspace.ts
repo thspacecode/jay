@@ -22,4 +22,6 @@ export interface RavenWorkspace{
 	logo?: string
 	/**	Only allow admins to create channels in the workspace : Check - If unchecked, any workspace member can create a channel	*/
 	only_admins_can_create_channels?: 0 | 1
+	/**	Is Omni-Channel Workspace : Check	*/
+	is_omni_channel_workspace?: 0 | 1
 }

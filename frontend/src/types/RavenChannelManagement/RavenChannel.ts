@@ -49,4 +49,10 @@ export interface RavenChannel{
 	openai_thread_id?: string
 	/**	Thread Bot : Link - Raven Bot	*/
 	thread_bot?: string
+	/**	Is Customer : Check	*/
+	is_customer?: 0 | 1
+	/**	Customer : Link - Raven User	*/
+	customer_user?: string
+	/**	Omni Channel Chat Provider : Link - Omni Channel Chat Provider	*/
+	omni_channel_chat_provider?: string
 }

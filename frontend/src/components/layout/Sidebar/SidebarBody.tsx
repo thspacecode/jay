@@ -13,10 +13,26 @@ import { useGetChannelUnreadCounts } from './useGetChannelUnreadCounts'
 import { useParams } from 'react-router-dom'
 import { atomWithStorage } from 'jotai/utils'
 import useUnreadThreadsCount from '@/hooks/useUnreadThreadsCount'
+import useFetchWorkspaces from '@/hooks/fetchers/useFetchWorkspaces'
+import { OmniChannelSidebarBody } from './OmniChannelSidebarBody'
 
 export const showOnlyMyChannelsAtom = atomWithStorage('showOnlyMyChannels', false)
 
 export const SidebarBody = () => {
+
+    const { workspaceID } = useParams()
+    const { data: workspacesData } = useFetchWorkspaces()
+
+    const isOmniChannel = workspacesData?.message.find(w => w.name === workspaceID)?.is_omni_channel_workspace === 1
+
+    if (isOmniChannel) {
+        return <OmniChannelSidebarBody />
+    }
+
+    return <StandardSidebarBody />
+}
+
+const StandardSidebarBody = () => {
 
     const unread_count = useFetchUnreadMessageCount()
     const { channels, dm_channels } = useContext(ChannelListContext) as ChannelListContextType
