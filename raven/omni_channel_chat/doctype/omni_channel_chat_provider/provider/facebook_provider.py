@@ -22,7 +22,7 @@ from raven.omni_channel_chat.models.message import (
 FacebookMessagingEvent = dict[str, Any]
 
 
-class FacebookProvider(Provider[FacebookMessagingEvent, dict]):
+class FacebookProvider(Provider[FacebookMessagingEvent]):
 	FB_API_URL = "https://graph.facebook.com/v22.0/me/messages"
 
 	def __init__(self, config):

@@ -34,7 +34,7 @@ from raven.omni_channel_chat.models.message import (
 from . import Provider
 
 
-class LineProvider(Provider[LineEvent, list[TextMessage]]):
+class LineProvider(Provider[LineEvent]):
 	config: Configuration
 	parser: WebhookParser
 

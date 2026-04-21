@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from werkzeug.wrappers import Response
 
@@ -11,8 +11,10 @@ if TYPE_CHECKING:
 		OmniChannelChatProvider,
 	)
 
+ProviderWebhookEvent = TypeVar("ProviderWebhookEvent")
 
-class Provider[ProviderWebhookEvent, ProviderMessageObject](ABC):
+
+class Provider(ABC, Generic[ProviderWebhookEvent]):
 	provider_config: "OmniChannelChatProvider"
 
 	def __init__(self, config: "OmniChannelChatProvider"):
