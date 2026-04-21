@@ -5,7 +5,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-from .provider import FacebookProvider, InstagramProvider, LineProvider, Provider
+from .provider import FacebookProvider, LineProvider, Provider
 
 
 class OmniChannelChatProvider(Document):
@@ -21,12 +21,9 @@ class OmniChannelChatProvider(Document):
 		fb_app_secret: DF.Password | None
 		fb_page_access_token: DF.Password | None
 		fb_verify_token: DF.Password | None
-		ig_app_secret: DF.Password | None
-		ig_page_access_token: DF.Password | None
-		ig_verify_token: DF.Password | None
 		line_channel_access_token: DF.Password | None
 		line_channel_secret: DF.Password | None
-		provider: DF.Literal["line", "facebook", "instagram"]
+		provider: DF.Literal["line", "facebook"]
 		raven_workspace: DF.Link
 	# end: auto-generated types
 
@@ -47,8 +44,6 @@ class OmniChannelChatProvider(Document):
 			return LineProvider(config=self)
 		elif self.provider == "facebook":
 			return FacebookProvider(config=self)
-		elif self.provider == "instagram":
-			return InstagramProvider(config=self)
 		else:
 			frappe.throw(_("Provider not implemented."))
 

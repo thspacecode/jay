@@ -86,16 +86,10 @@ class TextMessage(BaseMessage):
 			"text": self.text,
 		}
 
-	def to_instagram(self) -> dict:
-		return {
-			"text": self.text,
-		}
-
 	def provider_mapping(self):
 		return {
 			"line": self.to_line,
 			"facebook": self.to_facebook,
-			"instagram": self.to_instagram,
 		}
 
 
@@ -131,24 +125,10 @@ class FileMessage(BaseMessage):
 		else:
 			raise NotImplementedError("Facebook provider does not support file content.")
 
-	def to_instagram(self) -> dict:
-		if isinstance(self.file, FileUrl):
-			return {
-				"attachment": {
-					"type": "file",
-					"payload": {
-						"url": self.file.url,
-					},
-				},
-			}
-		else:
-			raise NotImplementedError("Instagram provider does not support file content.")
-
 	def provider_mapping(self):
 		return {
 			"line": self.to_line,
 			"facebook": self.to_facebook,
-			"instagram": self.to_instagram,
 		}
 
 

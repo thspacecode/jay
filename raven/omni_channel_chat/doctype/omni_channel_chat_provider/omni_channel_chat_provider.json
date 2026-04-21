@@ -16,10 +16,6 @@
   "fb_page_access_token",
   "fb_verify_token",
   "fb_app_secret",
-  "conf_instagram_sec",
-  "ig_page_access_token",
-  "ig_verify_token",
-  "ig_app_secret"
  ],
  "fields": [
   {
@@ -27,7 +23,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Provider",
-   "options": "line\nfacebook\ninstagram",
+   "options": "line\nfacebook",
    "reqd": 1
   },
   {
@@ -96,33 +92,6 @@
    "length": 512,
    "mandatory_depends_on": "eval:doc.provider==\"facebook\""
   },
-  {
-   "depends_on": "eval:doc.provider==\"instagram\"",
-   "fieldname": "conf_instagram_sec",
-   "fieldtype": "Section Break",
-   "label": "Config - Instagram"
-  },
-  {
-   "fieldname": "ig_page_access_token",
-   "fieldtype": "Password",
-   "label": "Page Access Token",
-   "length": 512,
-   "mandatory_depends_on": "eval:doc.provider==\"instagram\""
-  },
-  {
-   "fieldname": "ig_verify_token",
-   "fieldtype": "Password",
-   "label": "Verify Token",
-   "length": 512,
-   "mandatory_depends_on": "eval:doc.provider==\"instagram\""
-  },
-  {
-   "fieldname": "ig_app_secret",
-   "fieldtype": "Password",
-   "label": "App Secret",
-   "length": 512,
-   "mandatory_depends_on": "eval:doc.provider==\"instagram\""
-  }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
