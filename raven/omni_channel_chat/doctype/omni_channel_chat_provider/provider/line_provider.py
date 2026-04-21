@@ -3,7 +3,6 @@ from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
 	ApiClient,
 	Configuration,
-	Message,
 	MessagingApi,
 	MessagingApiBlob,
 	PushMessageRequest,
@@ -63,12 +62,6 @@ class LineProvider(Provider[LineEvent]):
 				ShowLoadingAnimationRequest(chatId=user_id, loadingSeconds=60)
 			)
 
-	@staticmethod
-	def _to_https(url: str) -> str:
-		if url and url.startswith("http://"):
-			return "https://" + url[7:]
-		return url
-
 	def send_reply(self, message: BaseMessage) -> None:
 		reply_token = (message.metadata or {}).get("reply_token")
 		line_msg = message.to_provider()
@@ -92,9 +85,10 @@ class LineProvider(Provider[LineEvent]):
 				PushMessageRequest(to=message.user_id, messages=[message.to_provider()])
 			)
 
-	def _download_line_content(self, message_id: str) -> bytes:
+	def download_attachment(self, message_id: str, file_name: str | None = None) -> FileContent:
 		with ApiClient(self.config) as api_client:
-			return bytes(MessagingApiBlob(api_client).get_message_content(message_id))
+			content = bytes(MessagingApiBlob(api_client).get_message_content(message_id))
+			return FileContent(file_name=file_name or "attachment", file_content=content)
 
 	def event_mapper(self, event: LineEvent) -> BaseMessage | None:
 		if not isinstance(event, LineMessageEvent):
@@ -114,10 +108,7 @@ class LineProvider(Provider[LineEvent]):
 				provider="line",
 				user_id=user_id,
 				metadata=metadata,
-				file=FileContent(
-					file_name=f"{msg.id}.jpg",
-					file_content=self._download_line_content(msg.id),
-				),
+				file=self.download_attachment(msg.id, f"{msg.id}.jpg"),
 			)
 
 		if isinstance(msg, FileMessageContent):
@@ -125,10 +116,7 @@ class LineProvider(Provider[LineEvent]):
 				provider="line",
 				user_id=user_id,
 				metadata=metadata,
-				file=FileContent(
-					file_name=msg.file_name,
-					file_content=self._download_line_content(msg.id),
-				),
+				file=self.download_attachment(msg.id, msg.file_name),
 			)
 
 		return None

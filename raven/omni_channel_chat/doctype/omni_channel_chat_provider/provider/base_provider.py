@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from werkzeug.wrappers import Response
 
-from raven.omni_channel_chat.models.message import BaseMessage
+from raven.omni_channel_chat.models.message import BaseMessage, FileContent, UserInfo
 from raven.omni_channel_chat.omni_channel_raven_connector import OmniChannelRavenConnector
 
 if TYPE_CHECKING:
@@ -36,8 +36,12 @@ class Provider(ABC, Generic[ProviderWebhookEvent]):
 		"""Extract data from frappe request and pass to `handle_webhook`."""
 
 	@abstractmethod
-	def get_user_info(self, user_id: str) -> dict:
+	def get_user_info(self, user_id: str) -> UserInfo:
 		"""Fetch user info from the provider's platform."""
+
+	@abstractmethod
+	def download_attachment(self, url: str, file_name: str | None = None) -> FileContent:
+		"""Download a file from the given URL and return its content and a file name."""
 
 	@abstractmethod
 	def show_typing(self, user_id: str) -> None:

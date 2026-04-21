@@ -27,6 +27,13 @@ if TYPE_CHECKING:
 
 
 @dataclass(kw_only=True)
+class UserInfo:
+	user_id: str
+	display_name: str
+	picture_url: str | None = None
+
+
+@dataclass(kw_only=True)
 class SenderInfo:
 	name: str
 	icon_url: str | None = None
