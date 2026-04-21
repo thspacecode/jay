@@ -10,10 +10,11 @@ from werkzeug.wrappers import Response
 from raven.omni_channel_chat.doctype.omni_channel_chat_provider.provider import (
 	Provider,
 )
-from raven.omni_channel_chat.models.messages import (
+from raven.omni_channel_chat.models.message import (
+	BaseMessage,
+	FileContent,
 	FileMessage,
 	ImageMessage,
-	StdMessage,
 	TextMessage,
 )
 
@@ -116,7 +117,7 @@ class InstagramProvider(Provider[InstagramMessagingEvent, dict]):
 				file_name = content_disposition.split("filename=")[-1].strip('" ')
 			return response.content, file_name
 
-	def event_mapper(self, event: InstagramMessagingEvent) -> StdMessage | None:
+	def event_mapper(self, event: InstagramMessagingEvent) -> BaseMessage | None:
 		message = event.get("message")
 		if message is None:
 			return None
@@ -126,7 +127,7 @@ class InstagramProvider(Provider[InstagramMessagingEvent, dict]):
 		metadata = {"mid": mid}
 
 		if "text" in message:
-			return TextMessage(user_id=user_id, metadata=metadata, text=message["text"])
+			return TextMessage(provider="instagram", user_id=user_id, metadata=metadata, text=message["text"])
 
 		for attachment in message.get("attachments") or []:
 			att_type = attachment.get("type")
@@ -136,25 +137,31 @@ class InstagramProvider(Provider[InstagramMessagingEvent, dict]):
 			if att_type == "image":
 				content, file_name = self._download_attachment(url, f"{mid or 'image'}.jpg")
 				return ImageMessage(
-					user_id=user_id, metadata=metadata, file_name=file_name, file_content=content
+					provider="instagram",
+					user_id=user_id,
+					metadata=metadata,
+					file=FileContent(file_name=file_name, file_content=content),
 				)
 			if att_type in ("file", "video", "audio"):
 				content, file_name = self._download_attachment(url, mid or "file")
 				return FileMessage(
-					user_id=user_id, metadata=metadata, file_name=file_name, file_content=content
+					provider="instagram",
+					user_id=user_id,
+					metadata=metadata,
+					file=FileContent(file_name=file_name, file_content=content),
 				)
 
 		return None
 
-	def standardize_events(self, events: list[InstagramMessagingEvent]) -> list[StdMessage]:
-		std_events: list[StdMessage] = []
+	def standardize_events(self, events: list[InstagramMessagingEvent]) -> list[BaseMessage]:
+		std_events: list[BaseMessage] = []
 		for event in events:
 			std_event = self.event_mapper(event)
 			if std_event:
 				std_events.append(std_event)
 		return std_events
 
-	def extract_messages(self, body: bytes, headers: dict) -> list[StdMessage]:
+	def extract_messages(self, body: bytes, headers: dict) -> list[BaseMessage]:
 		signature = headers.get("X-Hub-Signature-256", "") or headers.get(
 			"x-hub-signature-256", ""
 		)

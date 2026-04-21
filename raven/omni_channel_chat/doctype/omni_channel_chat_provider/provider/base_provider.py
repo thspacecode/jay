@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any
 
 from werkzeug.wrappers import Response
 
-from raven.omni_channel_chat.models.messages import StdMessage
+from raven.omni_channel_chat.models.message import BaseMessage
 from raven.omni_channel_chat.omni_channel_raven_connector import OmniChannelRavenConnector
 
 if TYPE_CHECKING:
@@ -19,7 +19,7 @@ class Provider[ProviderWebhookEvent, ProviderMessageObject](ABC):
 		self.provider_config = config
 		self.provider_config.decode_password_field()
 
-	def push_message_to_raven(self, messages: list[StdMessage]) -> None:
+	def push_message_to_raven(self, messages: list[BaseMessage]) -> None:
 		handler = OmniChannelRavenConnector(provider=self)
 		for message in messages:
 			handler.receive_from_provider(message)
@@ -50,13 +50,13 @@ class Provider[ProviderWebhookEvent, ProviderMessageObject](ABC):
 		"""Send an outbound message (push, not reply)."""
 
 	@abstractmethod
-	def event_mapper(self, event: ProviderWebhookEvent) -> StdMessage | None:
+	def event_mapper(self, event: ProviderWebhookEvent) -> BaseMessage | None:
 		"""Map a provider-specific webhook event into a standardized message. Return None to skip."""
 
 	@abstractmethod
-	def standardize_events(self, events: list[ProviderWebhookEvent]) -> list[StdMessage]:
-		"""Standardize a list of provider-specific webhook events into StdMessage instances."""
+	def standardize_events(self, events: list[ProviderWebhookEvent]) -> list[BaseMessage]:
+		"""Standardize a list of provider-specific webhook events into BaseMessage instances."""
 
 	@abstractmethod
-	def extract_messages(self, body: bytes, headers: dict) -> list[StdMessage]:
+	def extract_messages(self, body: bytes, headers: dict) -> list[BaseMessage]:
 		"""Parse the raw webhook body into standardized messages."""

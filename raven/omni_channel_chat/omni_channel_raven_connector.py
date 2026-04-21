@@ -3,7 +3,15 @@ from typing import TYPE_CHECKING, cast
 import frappe
 from frappe.utils import get_url
 
-from raven.omni_channel_chat.models.messages import StdMessage
+from raven.omni_channel_chat.models.message import (
+	BaseMessage,
+	FileMessage,
+	FileUrl,
+	FileContent,
+	ImageMessage,
+	SenderInfo,
+	TextMessage,
+)
 
 if TYPE_CHECKING:
 	from frappe.core.doctype.user.user import User
@@ -19,6 +27,56 @@ if TYPE_CHECKING:
 		RavenChannel,
 	)
 	from raven.raven_messaging.doctype.raven_message.raven_message import RavenMessage
+
+
+def _resolve_sender(owner: str) -> "SenderInfo | None":
+	raven_user = cast(
+		"dict | None",
+		frappe.db.get_value("Raven User", owner, ["full_name", "user_image"], as_dict=True),
+	)
+	if not raven_user:
+		return None
+	avatar_url = cast("str | None", raven_user["user_image"])
+	if avatar_url and avatar_url.startswith("/"):
+		avatar_url = get_url(avatar_url)
+	return SenderInfo(name=raven_user["full_name"] or "", icon_url=avatar_url or None)
+
+
+def _build_outbound_message(
+	raven_message: "RavenMessage", sender: "SenderInfo | None", provider_name: str
+) -> BaseMessage:
+	msg_type = raven_message.message_type
+	if msg_type == "Text":
+		return TextMessage(provider=provider_name, user_id="", text=raven_message.content or "", sender=sender)
+	file_url = raven_message.file
+	if file_url and file_url.startswith("/"):
+		file_url = get_url(file_url)
+	if msg_type == "Image":
+		return ImageMessage(
+			provider=provider_name, user_id="", file=FileUrl(url=file_url or ""), sender=sender
+		)
+	if msg_type == "File":
+		return FileMessage(
+			provider=provider_name, user_id="", file=FileUrl(url=file_url or ""), sender=sender
+		)
+	raise ValueError(f"Unsupported outbound message type: {msg_type}")
+
+
+def _message_to_payload(message: BaseMessage) -> dict:
+	sender = (
+		{"name": message.sender.name, "icon_url": message.sender.icon_url}
+		if message.sender
+		else None
+	)
+	if isinstance(message, TextMessage):
+		return {"type": "Text", "text": message.text, "sender": sender}
+	if isinstance(message, ImageMessage):
+		file_url = message.file.url if isinstance(message.file, FileUrl) else ""
+		return {"type": "Image", "file_url": file_url, "sender": sender}
+	if isinstance(message, FileMessage):
+		file_url = message.file.url if isinstance(message.file, FileUrl) else ""
+		return {"type": "File", "file_url": file_url, "sender": sender}
+	raise ValueError(f"Unsupported message type: {type(message)}")
 
 
 class OmniChannelRavenConnector:
@@ -153,7 +211,7 @@ class OmniChannelRavenConnector:
 		for message in messages:
 			self.receive_from_provider(message)
 
-	def receive_from_provider(self, message: StdMessage) -> "RavenChannel":
+	def receive_from_provider(self, message: BaseMessage) -> "RavenChannel":
 		"""Inbound: turn a provider webhook payload into a Raven message.
 
 		Creates the Frappe user, Raven user, and channel on first contact,
@@ -161,8 +219,8 @@ class OmniChannelRavenConnector:
 
 		Returns the Raven channel the message was posted to.
 		"""
-		user = self._get_or_create_customer_user(user_id=message.user_id)
-		frappe.set_user(user.name)
+		user = self._get_or_create_customer_user(user_id=message.user_id or "")
+		frappe.set_user(str(user.name))
 
 		raven_user = self._get_or_create_raven_user(user=user, user_id=message.user_id)
 		raven_channel = self._get_or_create_channel(raven_user=raven_user)
@@ -170,9 +228,7 @@ class OmniChannelRavenConnector:
 
 		return raven_channel
 
-	def _save_inbound_message(self, *, raven_channel: "RavenChannel", message: StdMessage) -> None:
-		from raven.omni_channel_chat.models.messages import FileMessage, ImageMessage, TextMessage
-
+	def _save_inbound_message(self, *, raven_channel: "RavenChannel", message: BaseMessage) -> None:
 		doc = frappe.new_doc(doctype="Raven Message")
 		doc.update(
 			{
@@ -185,12 +241,12 @@ class OmniChannelRavenConnector:
 		)
 		if isinstance(message, TextMessage):
 			doc.text = message.text
-		elif isinstance(message, (ImageMessage, FileMessage)):
+		elif isinstance(message, (ImageMessage, FileMessage)) and isinstance(message.file, FileContent):
 			file_doc = frappe.get_doc(
 				{
 					"doctype": "File",
-					"file_name": message.file_name,
-					"content": message.file_content,
+					"file_name": message.file.file_name,
+					"content": message.file.file_content,
 					"is_private": 0,
 				}
 			)
@@ -246,29 +302,10 @@ class OmniChannelRavenConnector:
 		if not user_id:
 			return
 
-		message: dict = {"type": raven_message.message_type}
-		if raven_message.message_type == "Text":
-			message["text"] = raven_message.content
-		elif raven_message.message_type in ("Image", "File"):
-			file_url = raven_message.file
-			if file_url and file_url.startswith("/"):
-				file_url = get_url(file_url)
-			message["file_url"] = file_url
-
-		sender = cast(
-			"dict | None",
-			frappe.db.get_value(
-				"Raven User", raven_message.owner, ["full_name", "user_image"], as_dict=True
-			),
-		)
-		if sender:
-			avatar_url = cast("str | None", sender["user_image"])
-			if avatar_url and avatar_url.startswith("/"):
-				avatar_url = get_url(avatar_url)
-			message["sender"] = {
-				"name": sender["full_name"] or None,
-				"icon_url": avatar_url or None,
-			}
+		provider_name = connector.chat_integration.provider
+		sender = _resolve_sender(raven_message.owner)
+		outbound_msg = _build_outbound_message(raven_message, sender, provider_name)
+		payload = _message_to_payload(outbound_msg)
 
 		context = frappe.parse_json(
 			cast(
@@ -282,4 +319,48 @@ class OmniChannelRavenConnector:
 			)
 		)
 
-		connector.provider.send_reply(user_id=str(user_id), message=message, context=context)
+		connector.provider.send_reply(user_id=str(user_id), message=payload, context=context)
+
+	@classmethod
+	def send_outbound_message(
+		cls, channel_name: str, message: BaseMessage, owner: str | None = None
+	) -> None:
+		"""Push a typed outbound message to the external provider for a given Raven channel.
+
+		Unlike push_to_provider (which is triggered by a Raven message doc), this method
+		accepts any BaseMessage directly — e.g. TrackingStatusMessage — and dispatches
+		it to the provider without creating a Raven message first.
+		"""
+		channel = cast(
+			"dict | None",
+			frappe.db.get_value(
+				doctype="Raven Channel",
+				filters=channel_name,
+				fieldname=["is_customer", "customer_user", "omni_channel_chat_provider"],
+				as_dict=True,
+			),
+		)
+		if not channel or not channel["is_customer"] or not channel["omni_channel_chat_provider"]:
+			return
+
+		provider_config = frappe.get_doc(
+			"Omni Channel Chat Provider", channel["omni_channel_chat_provider"]
+		)
+		connector = cls(provider=provider_config.get_provider())
+
+		user_id = frappe.db.get_value(
+			doctype="User Social Login",
+			filters={
+				"provider": connector.chat_integration.provider,
+				"parent": channel["customer_user"],
+			},
+			fieldname="userid",
+		)
+		if not user_id:
+			return
+
+		if message.sender is None and owner:
+			message.sender = _resolve_sender(owner)
+
+		payload = _message_to_payload(message)
+		connector.provider.send_message(user_id=str(user_id), message=payload)
