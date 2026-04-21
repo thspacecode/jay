@@ -62,22 +62,6 @@ def _build_outbound_message(
 	raise ValueError(f"Unsupported outbound message type: {msg_type}")
 
 
-def _message_to_payload(message: BaseMessage) -> dict:
-	sender = (
-		{"name": message.sender.name, "icon_url": message.sender.icon_url}
-		if message.sender
-		else None
-	)
-	if isinstance(message, TextMessage):
-		return {"type": "Text", "text": message.text, "sender": sender}
-	if isinstance(message, ImageMessage):
-		file_url = message.file.url if isinstance(message.file, FileUrl) else ""
-		return {"type": "Image", "file_url": file_url, "sender": sender}
-	if isinstance(message, FileMessage):
-		file_url = message.file.url if isinstance(message.file, FileUrl) else ""
-		return {"type": "File", "file_url": file_url, "sender": sender}
-	raise ValueError(f"Unsupported message type: {type(message)}")
-
 
 class OmniChannelRavenConnector:
 	"""Bridges Raven and an external omni-channel provider.
@@ -305,9 +289,8 @@ class OmniChannelRavenConnector:
 		provider_name = connector.chat_integration.provider
 		sender = _resolve_sender(raven_message.owner)
 		outbound_msg = _build_outbound_message(raven_message, sender, provider_name)
-		payload = _message_to_payload(outbound_msg)
-
-		context = frappe.parse_json(
+		outbound_msg.user_id = str(user_id)
+		outbound_msg.metadata = frappe.parse_json(
 			cast(
 				str,
 				frappe.db.get_value(
@@ -319,7 +302,7 @@ class OmniChannelRavenConnector:
 			)
 		)
 
-		connector.provider.send_reply(user_id=str(user_id), message=payload, context=context)
+		connector.provider.send_reply(message=outbound_msg)
 
 	@classmethod
 	def send_outbound_message(
@@ -362,5 +345,5 @@ class OmniChannelRavenConnector:
 		if message.sender is None and owner:
 			message.sender = _resolve_sender(owner)
 
-		payload = _message_to_payload(message)
-		connector.provider.send_message(user_id=str(user_id), message=payload)
+		message.user_id = str(user_id)
+		connector.provider.send_message(message=message)

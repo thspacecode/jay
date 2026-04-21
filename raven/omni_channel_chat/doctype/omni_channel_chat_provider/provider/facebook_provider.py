@@ -80,32 +80,15 @@ class FacebookProvider(Provider[FacebookMessagingEvent]):
 				json={"recipient": {"id": user_id}, "sender_action": "typing_on"},
 			)
 
-	def send_reply(self, user_id: str, message: dict, context: Any) -> None:
-		self.send_message(user_id=user_id, message=message)
+	def send_reply(self, message: BaseMessage) -> None:
+		self.send_message(message)
 
-	def send_message(self, user_id: str, message: dict) -> None:
-		msg_type = message.get("type", "Text")
-		if msg_type == "Image":
-			fb_message = {
-				"attachment": {
-					"type": "image",
-					"payload": {"url": message["file_url"], "is_reusable": True},
-				}
-			}
-		elif msg_type == "File":
-			fb_message = {
-				"attachment": {
-					"type": "file",
-					"payload": {"url": message["file_url"], "is_reusable": True},
-				}
-			}
-		else:
-			fb_message = {"text": message["text"]}
+	def send_message(self, message: BaseMessage) -> None:
 		with httpx.Client() as client:
 			client.post(
 				self.FB_API_URL,
 				params={"access_token": self._page_access_token},
-				json={"recipient": {"id": user_id}, "message": fb_message},
+				json={"recipient": {"id": message.user_id}, "message": message.to_provider()},
 			)
 
 	def _download_attachment(self, url: str, default_name: str) -> tuple[bytes, str]:
@@ -128,7 +111,9 @@ class FacebookProvider(Provider[FacebookMessagingEvent]):
 		metadata = {"mid": mid}
 
 		if "text" in message:
-			return TextMessage(provider="facebook", user_id=user_id, metadata=metadata, text=message["text"])
+			return TextMessage(
+				provider="facebook", user_id=user_id, metadata=metadata, text=message["text"]
+			)
 
 		for attachment in message.get("attachments") or []:
 			att_type = attachment.get("type")

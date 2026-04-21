@@ -1,23 +1,15 @@
-from typing import Any
-
 import frappe
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
 	ApiClient,
 	Configuration,
-	ImageMessage,
 	Message,
 	MessagingApi,
 	MessagingApiBlob,
 	PushMessageRequest,
 	ReplyMessageRequest,
 	ShowLoadingAnimationRequest,
-	TextMessage,
 )
-from linebot.v3.messaging import (
-	Sender as LineSender,
-)
-from linebot.v3.messaging import TextMessage as LineTextMessage
 from linebot.v3.webhook import WebhookParser
 from linebot.v3.webhooks import Event as LineEvent
 from linebot.v3.webhooks import FileMessageContent, ImageMessageContent, TextMessageContent
@@ -28,6 +20,8 @@ from raven.omni_channel_chat.models.message import (
 	FileContent,
 	FileMessage,
 	ImageMessage,
+)
+from raven.omni_channel_chat.models.message import (
 	TextMessage as StdTextMessage,
 )
 
@@ -75,36 +69,9 @@ class LineProvider(Provider[LineEvent]):
 			return "https://" + url[7:]
 		return url
 
-	def _build_outbound_message(self, message: dict) -> Message:
-		sender = None
-		if message.get("sender"):
-			sender = LineSender(
-				name=message["sender"].get("name"),
-				icon_url=message["sender"].get("icon_url"),
-			)
-		msg_type = message.get("type", "Text")
-		if msg_type == "Image":
-			file_url = self._to_https(message["file_url"])
-			print(file_url)
-			img_msg = ImageMessage(
-				original_content_url=file_url,
-				preview_image_url=file_url,
-			)
-			if sender:
-				img_msg.sender = sender
-			return img_msg
-		# File falls back to a text link (LINE Messaging API has no outbound file type)
-		text = (
-			self._to_https(message["file_url"]) if msg_type == "File" else message.get("text", "")
-		)
-		line_msg = LineTextMessage(text=text)
-		if sender:
-			line_msg.sender = sender
-		return line_msg
-
-	def send_reply(self, user_id: str, message: dict, context: Any) -> None:
-		reply_token = (context or {}).get("reply_token")
-		line_msg = self._build_outbound_message(message)
+	def send_reply(self, message: BaseMessage) -> None:
+		reply_token = (message.metadata or {}).get("reply_token")
+		line_msg = message.to_provider()
 		if reply_token:
 			try:
 				with ApiClient(self.config) as api_client:
@@ -116,13 +83,13 @@ class LineProvider(Provider[LineEvent]):
 				pass
 		with ApiClient(self.config) as api_client:
 			MessagingApi(api_client).push_message(
-				PushMessageRequest(to=user_id, messages=[line_msg])
+				PushMessageRequest(to=message.user_id, messages=[line_msg])
 			)
 
-	def send_message(self, user_id: str, message: dict) -> None:
+	def send_message(self, message: BaseMessage) -> None:
 		with ApiClient(self.config) as api_client:
 			MessagingApi(api_client).push_message(
-				PushMessageRequest(to=user_id, messages=[self._build_outbound_message(message)])
+				PushMessageRequest(to=message.user_id, messages=[message.to_provider()])
 			)
 
 	def _download_line_content(self, message_id: str) -> bytes:
@@ -138,7 +105,9 @@ class LineProvider(Provider[LineEvent]):
 		user_id = event.source.user_id
 
 		if isinstance(msg, TextMessageContent):
-			return StdTextMessage(provider="line", user_id=user_id, metadata=metadata, text=msg.text)
+			return StdTextMessage(
+				provider="line", user_id=user_id, metadata=metadata, text=msg.text
+			)
 
 		if isinstance(msg, ImageMessageContent):
 			return ImageMessage(

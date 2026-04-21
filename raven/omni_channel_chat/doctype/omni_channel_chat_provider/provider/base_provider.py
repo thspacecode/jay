@@ -44,11 +44,11 @@ class Provider(ABC, Generic[ProviderWebhookEvent]):
 		"""Show a typing / loading indicator."""
 
 	@abstractmethod
-	def send_reply(self, user_id: str, message: dict, context: Any) -> None:
+	def send_reply(self, message: BaseMessage) -> None:
 		"""Send a chat response back within the webhook reply context."""
 
 	@abstractmethod
-	def send_message(self, user_id: str, message: dict) -> None:
+	def send_message(self, message: BaseMessage) -> None:
 		"""Send an outbound message (push, not reply)."""
 
 	@abstractmethod
