@@ -1,3 +1,5 @@
+from typing import Callable
+
 import frappe
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
@@ -13,6 +15,7 @@ from linebot.v3.webhook import WebhookParser
 from linebot.v3.webhooks import Event as LineEvent
 from linebot.v3.webhooks import FileMessageContent, ImageMessageContent, TextMessageContent
 from linebot.v3.webhooks import MessageEvent as LineMessageEvent
+from werkzeug.wrappers import Response
 
 from raven.omni_channel_chat.models.message import (
 	BaseMessage,
@@ -41,11 +44,11 @@ class LineProvider(Provider[LineEvent]):
 			channel_secret=self.provider_config.line_channel_secret,
 		)
 
-	def handle_frappe_api(self):
+	def handle_frappe_api(self, callback: Callable[[BaseMessage], None]) -> Response:
 		request = frappe.local.request
 		body: bytes = request.get_data()
 		headers: dict = dict(request.headers)
-		return self.handle_webhook(body=body, headers=headers)
+		return self.handle_webhook(body=body, headers=headers, callback=callback)
 
 	def get_user_info(self, user_id: str) -> dict:
 		with ApiClient(self.config) as api_client:

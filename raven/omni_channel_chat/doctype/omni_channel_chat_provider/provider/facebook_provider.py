@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 import frappe
 import httpx
@@ -52,7 +52,7 @@ class FacebookProvider(Provider[FacebookMessagingEvent]):
 		else:
 			frappe.throw("Verification failed", frappe.PermissionError)
 
-	def handle_frappe_api(self):
+	def handle_frappe_api(self, callback: Callable[[BaseMessage], None]) -> Response:
 		request = frappe.local.request
 
 		if request.method == "GET":
@@ -60,7 +60,7 @@ class FacebookProvider(Provider[FacebookMessagingEvent]):
 		elif request.method == "POST":
 			body: bytes = request.get_data()
 			headers: dict = dict(request.headers)
-			return self.handle_webhook(body=body, headers=headers)
+			return self.handle_webhook(body=body, headers=headers, callback=callback)
 		else:
 			return Response("Method Not Allowed", status=405, content_type="text/plain")
 

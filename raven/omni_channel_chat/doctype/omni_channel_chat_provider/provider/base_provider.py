@@ -1,10 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import TYPE_CHECKING, Callable, Generic, TypeVar
 
 from werkzeug.wrappers import Response
 
 from raven.omni_channel_chat.models.message import BaseMessage, FileContent, UserInfo
-from raven.omni_channel_chat.omni_channel_raven_connector import OmniChannelRavenConnector
 
 if TYPE_CHECKING:
 	from raven.omni_channel_chat.doctype.omni_channel_chat_provider.omni_channel_chat_provider import (
@@ -21,18 +20,16 @@ class Provider(ABC, Generic[ProviderWebhookEvent]):
 		self.provider_config = config
 		self.provider_config.decode_password_field()
 
-	def push_message_to_raven(self, messages: list[BaseMessage]) -> None:
-		handler = OmniChannelRavenConnector(provider=self)
-		for message in messages:
-			handler.receive_from_provider(message)
-
-	def handle_webhook(self, body: bytes, headers: dict) -> Response:
+	def handle_webhook(
+		self, body: bytes, headers: dict, callback: Callable[[BaseMessage], None]
+	) -> Response:
 		messages = self.extract_messages(body=body, headers=headers)
-		self.push_message_to_raven(messages=messages)
+		for message in messages:
+			callback(message)
 		return Response("ok", status=200, content_type="text/plain")
 
 	@abstractmethod
-	def handle_frappe_api(self) -> Response:
+	def handle_frappe_api(self, callback: Callable[[BaseMessage], None]) -> Response:
 		"""Extract data from frappe request and pass to `handle_webhook`."""
 
 	@abstractmethod

@@ -4,6 +4,7 @@ from werkzeug.wrappers import Response
 from raven.omni_channel_chat.doctype.omni_channel_chat_provider.omni_channel_chat_provider import (
 	get_omni_channel_chat_provider,
 )
+from raven.omni_channel_chat.omni_channel_raven_connector import OmniChannelRavenConnector
 
 
 def extract_provider_slug() -> str:
@@ -32,4 +33,6 @@ def handle() -> Response:
 	"""
 	slug = extract_provider_slug()
 	provider = get_omni_channel_chat_provider(slug=slug)
-	return provider.handle_frappe_api()
+	return provider.handle_frappe_api(
+		callback=OmniChannelRavenConnector(provider=provider).receive_from_provider
+	)
