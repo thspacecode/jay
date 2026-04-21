@@ -33,6 +33,6 @@ def handle() -> Response:
 	"""
 	slug = extract_provider_slug()
 	provider = get_omni_channel_chat_provider(slug=slug)
-	return provider.handle_frappe_api(
-		callback=OmniChannelRavenConnector(provider=provider).receive_from_provider
-	)
+	connector = OmniChannelRavenConnector(provider=provider)
+
+	return provider.handle_frappe_api(callback=connector.receive_from_provider)

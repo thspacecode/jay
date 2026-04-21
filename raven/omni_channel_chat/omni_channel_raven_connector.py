@@ -5,9 +5,9 @@ from frappe.utils import get_url
 
 from raven.omni_channel_chat.models.message import (
 	BaseMessage,
+	FileContent,
 	FileMessage,
 	FileUrl,
-	FileContent,
 	ImageMessage,
 	SenderInfo,
 	TextMessage,
@@ -47,7 +47,9 @@ def _build_outbound_message(
 ) -> BaseMessage:
 	msg_type = raven_message.message_type
 	if msg_type == "Text":
-		return TextMessage(provider=provider_name, user_id="", text=raven_message.content or "", sender=sender)
+		return TextMessage(
+			provider=provider_name, user_id="", text=raven_message.content or "", sender=sender
+		)
 	file_url = raven_message.file
 	if file_url and file_url.startswith("/"):
 		file_url = get_url(file_url)
@@ -60,7 +62,6 @@ def _build_outbound_message(
 			provider=provider_name, user_id="", file=FileUrl(url=file_url or ""), sender=sender
 		)
 	raise ValueError(f"Unsupported outbound message type: {msg_type}")
-
 
 
 class OmniChannelRavenConnector:
@@ -195,7 +196,7 @@ class OmniChannelRavenConnector:
 		for message in messages:
 			self.receive_from_provider(message)
 
-	def receive_from_provider(self, message: BaseMessage) -> "RavenChannel":
+	def receive_from_provider(self, message: BaseMessage) -> None:
 		"""Inbound: turn a provider webhook payload into a Raven message.
 
 		Creates the Frappe user, Raven user, and channel on first contact,
@@ -210,9 +211,9 @@ class OmniChannelRavenConnector:
 		raven_channel = self._get_or_create_channel(raven_user=raven_user)
 		self._save_inbound_message(raven_channel=raven_channel, message=message)
 
-		return raven_channel
-
-	def _save_inbound_message(self, *, raven_channel: "RavenChannel", message: BaseMessage) -> None:
+	def _save_inbound_message(
+		self, *, raven_channel: "RavenChannel", message: BaseMessage
+	) -> None:
 		doc = frappe.new_doc(doctype="Raven Message")
 		doc.update(
 			{
@@ -225,7 +226,9 @@ class OmniChannelRavenConnector:
 		)
 		if isinstance(message, TextMessage):
 			doc.text = message.text
-		elif isinstance(message, (ImageMessage, FileMessage)) and isinstance(message.file, FileContent):
+		elif isinstance(message, (ImageMessage, FileMessage)) and isinstance(
+			message.file, FileContent
+		):
 			file_doc = frappe.get_doc(
 				{
 					"doctype": "File",
