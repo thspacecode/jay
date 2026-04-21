@@ -15,7 +15,7 @@
   "conf_facebook_sec",
   "fb_page_access_token",
   "fb_verify_token",
-  "fb_app_secret",
+  "fb_app_secret"
  ],
  "fields": [
   {
@@ -91,7 +91,7 @@
    "label": "App Secret",
    "length": 512,
    "mandatory_depends_on": "eval:doc.provider==\"facebook\""
-  },
+  }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
