@@ -32,7 +32,7 @@ class FacebookConfig:
 
 
 class FacebookProvider(Provider[FacebookMessagingEvent]):
-	fb_api_url = "https://graph.facebook.com/v25.0/me/messages"
+	fb_api_url = "https://graph.facebook.com/v25.0"
 
 	def __init__(self, config):
 		super().__init__(config=config)
@@ -90,7 +90,7 @@ class FacebookProvider(Provider[FacebookMessagingEvent]):
 	def show_typing(self, user_id: str) -> None:
 		with httpx.Client() as client:
 			client.post(
-				self.fb_api_url,
+				f"{self.fb_api_url}/me/messages",
 				params={"access_token": self.config.page_access_token},
 				json={"recipient": {"id": user_id}, "sender_action": "typing_on"},
 			)
@@ -101,7 +101,7 @@ class FacebookProvider(Provider[FacebookMessagingEvent]):
 	def send_message(self, message: BaseMessage) -> None:
 		with httpx.Client() as client:
 			client.post(
-				self.fb_api_url,
+				f"{self.fb_api_url}/me/messages",
 				params={"access_token": self.config.page_access_token},
 				json={"recipient": {"id": message.user_id}, "message": message.to_provider()},
 			)
@@ -127,7 +127,11 @@ class FacebookProvider(Provider[FacebookMessagingEvent]):
 
 		if "text" in message:
 			return TextMessage(
-				provider="facebook", user_id=user_id, metadata=metadata, text=message["text"]
+				provider=self.provider_config.provider,
+				provider_id=self.provider_config.name,
+				user_id=user_id,
+				metadata=metadata,
+				text=message["text"],
 			)
 
 		for attachment in message.get("attachments") or []:
@@ -137,14 +141,16 @@ class FacebookProvider(Provider[FacebookMessagingEvent]):
 				continue
 			if att_type == "image":
 				return ImageMessage(
-					provider="facebook",
+					provider=self.provider_config.provider,
+					provider_id=self.provider_config.name,
 					user_id=user_id,
 					metadata=metadata,
 					file=self.download_attachment(url),
 				)
 			if att_type in ("file", "document"):
 				return FileMessage(
-					provider="facebook",
+					provider=self.provider_config.provider,
+					provider_id=self.provider_config.name,
 					user_id=user_id,
 					metadata=metadata,
 					file=self.download_attachment(url),

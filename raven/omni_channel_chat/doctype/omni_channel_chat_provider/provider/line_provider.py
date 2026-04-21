@@ -22,6 +22,7 @@ from raven.omni_channel_chat.models.message import (
 	FileContent,
 	FileMessage,
 	ImageMessage,
+	UserInfo,
 )
 from raven.omni_channel_chat.models.message import (
 	TextMessage as StdTextMessage,
@@ -50,14 +51,14 @@ class LineProvider(Provider[LineEvent]):
 		headers: dict = dict(request.headers)
 		return self.handle_webhook(body=body, headers=headers, callback=callback)
 
-	def get_user_info(self, user_id: str) -> dict:
+	def get_user_info(self, user_id: str) -> UserInfo:
 		with ApiClient(self.config) as api_client:
 			profile = MessagingApi(api_client).get_profile(user_id)
-			return {
-				"user_id": profile.user_id,
-				"display_name": profile.display_name,
-				"picture_url": profile.picture_url,
-			}
+			return UserInfo(
+				user_id=profile.user_id,
+				display_name=profile.display_name,
+				picture_url=profile.picture_url,
+			)
 
 	def show_typing(self, user_id: str) -> None:
 		with ApiClient(self.config) as api_client:
@@ -85,7 +86,7 @@ class LineProvider(Provider[LineEvent]):
 	def send_message(self, message: BaseMessage) -> None:
 		with ApiClient(self.config) as api_client:
 			MessagingApi(api_client).push_message(
-				PushMessageRequest(to=message.user_id, messages=[message.to_provider()])
+				PushMessageRequest(to=message.user_id, messages=[message.to_line()])
 			)
 
 	def download_attachment(self, message_id: str, file_name: str | None = None) -> FileContent:
@@ -103,12 +104,17 @@ class LineProvider(Provider[LineEvent]):
 
 		if isinstance(msg, TextMessageContent):
 			return StdTextMessage(
-				provider="line", user_id=user_id, metadata=metadata, text=msg.text
+				provider=self.provider_config.provider,
+				provider_id=self.provider_config.name,
+				user_id=user_id,
+				metadata=metadata,
+				text=msg.text,
 			)
 
 		if isinstance(msg, ImageMessageContent):
 			return ImageMessage(
-				provider="line",
+				provider=self.provider_config.provider,
+				provider_id=self.provider_config.name,
 				user_id=user_id,
 				metadata=metadata,
 				file=self.download_attachment(msg.id, f"{msg.id}.jpg"),
@@ -116,7 +122,8 @@ class LineProvider(Provider[LineEvent]):
 
 		if isinstance(msg, FileMessageContent):
 			return FileMessage(
-				provider="line",
+				provider=self.provider_config.provider,
+				provider_id=self.provider_config.name,
 				user_id=user_id,
 				metadata=metadata,
 				file=self.download_attachment(msg.id, msg.file_name),

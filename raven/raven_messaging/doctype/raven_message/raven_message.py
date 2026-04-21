@@ -721,7 +721,9 @@ class RavenMessage(Document):
 	def push_message_to_omni_channel_chat_provider(self) -> None:
 		from raven.omni_channel_chat.omni_channel_raven_connector import OmniChannelRavenConnector
 
-		OmniChannelRavenConnector.push_to_provider(raven_message=self)
+		provider = OmniChannelRavenConnector.get_provider_from_channel(self.channel_id)
+		connector = OmniChannelRavenConnector(provider=provider)
+		connector.push_to_provider(raven_message=self)
 
 
 def on_doctype_update():

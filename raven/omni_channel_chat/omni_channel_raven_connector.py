@@ -1,8 +1,12 @@
 from typing import TYPE_CHECKING, cast
 
 import frappe
-from frappe.utils import get_url
+from frappe import _
+from frappe.utils import get_host_name, get_site_name, get_url
 
+from raven.omni_channel_chat.doctype.omni_channel_chat_provider.omni_channel_chat_provider import (
+	get_omni_channel_chat_provider,
+)
 from raven.omni_channel_chat.models.message import (
 	BaseMessage,
 	FileContent,
@@ -16,9 +20,6 @@ from raven.omni_channel_chat.models.message import (
 if TYPE_CHECKING:
 	from frappe.core.doctype.user.user import User
 
-	from raven.omni_channel_chat.doctype.omni_channel_chat_provider.omni_channel_chat_provider import (
-		OmniChannelChatProvider,
-	)
 	from raven.omni_channel_chat.doctype.omni_channel_chat_provider.provider import (
 		Provider,
 	)
@@ -29,69 +30,114 @@ if TYPE_CHECKING:
 	from raven.raven_messaging.doctype.raven_message.raven_message import RavenMessage
 
 
-def _resolve_sender(owner: str) -> "SenderInfo | None":
-	raven_user = cast(
-		"dict | None",
-		frappe.db.get_value("Raven User", owner, ["full_name", "user_image"], as_dict=True),
-	)
-	if not raven_user:
-		return None
-	avatar_url = cast("str | None", raven_user["user_image"])
-	if avatar_url and avatar_url.startswith("/"):
-		avatar_url = get_url(avatar_url)
-	return SenderInfo(name=raven_user["full_name"] or "", icon_url=avatar_url or None)
-
-
-def _build_outbound_message(
-	raven_message: "RavenMessage", sender: "SenderInfo | None", provider_name: str
-) -> BaseMessage:
-	msg_type = raven_message.message_type
-	if msg_type == "Text":
-		return TextMessage(
-			provider=provider_name, user_id="", text=raven_message.content or "", sender=sender
-		)
-	file_url = raven_message.file
-	if file_url and file_url.startswith("/"):
-		file_url = get_url(file_url)
-	if msg_type == "Image":
-		return ImageMessage(
-			provider=provider_name, user_id="", file=FileUrl(url=file_url or ""), sender=sender
-		)
-	if msg_type == "File":
-		return FileMessage(
-			provider=provider_name, user_id="", file=FileUrl(url=file_url or ""), sender=sender
-		)
-	raise ValueError(f"Unsupported outbound message type: {msg_type}")
-
-
 class OmniChannelRavenConnector:
-	"""Bridges Raven and an external omni-channel provider.
-
-	Two main interfaces:
-	    receive_from_provider – inbound path: provider webhook payload → Raven message
-	    push_to_provider      – outbound path: Raven message → external provider
-	"""
+	provider_prefix = "occ"
 
 	def __init__(self, provider: "Provider"):
 		self.provider = provider
-		self.chat_integration: "OmniChannelChatProvider" = provider.provider_config
 
-	# ── shared helpers ──────────────────────────────────────────────────────
-
-	def _get_or_create_customer_user(self, user_id: str) -> "User":
-		provider_name = self.chat_integration.provider
-
-		user_pk = frappe.db.get_value(
-			doctype="User Social Login",
-			filters={"provider": provider_name, "userid": user_id},
-			fieldname="parent",
+	@staticmethod
+	def get_provider_from_channel(channel_name: str) -> "Provider":
+		provider_name = frappe.db.get_value(
+			doctype="Raven Channel",
+			filters=channel_name,
+			fieldname="omni_channel_chat_provider",
+		)
+		if not provider_name:
+			frappe.throw(
+				_("Omni Channel Chat Provider not found for channel {0}").format(channel_name)
+			)
+		return get_omni_channel_chat_provider(
+			slug=provider_name,
 		)
 
-		if user_pk:
-			return cast("User", frappe.get_doc("User", str(user_pk)))
+	def get_provider_pk(self, provider_id: str) -> str:
+		return f"{self.provider_prefix}_{provider_id}"
+
+	def get_channel_name(self, raven_user: "RavenUser") -> str:
+		return f"{self.provider.provider_config.name}_{raven_user.name}"
+
+	def get_sender_info(self, owner: str) -> "SenderInfo | None":
+		raven_user = cast(
+			"dict | None",
+			frappe.db.get_value("Raven User", owner, ["full_name", "user_image"], as_dict=True),
+		)
+		if not raven_user:
+			return None
+		avatar_url = cast("str | None", raven_user["user_image"])
+		if avatar_url and avatar_url.startswith("/"):
+			avatar_url = get_url(avatar_url)
+		return SenderInfo(name=raven_user["full_name"] or "", icon_url=avatar_url or None)
+
+	def get_user_id(self, channel_id: str) -> str:
+		channel_user = frappe.db.get_value(
+			doctype="Raven Channel",
+			filters=channel_id,
+			fieldname="customer_user",
+		)
+
+		user_id = frappe.db.get_value(
+			doctype="User Social Login",
+			filters={
+				"provider": self.get_provider_pk(self.provider.provider_config.name),
+				"parent": channel_user,
+			},
+			fieldname="userid",
+		)
+
+		if not user_id:
+			frappe.throw(_("User ID not found for channel {0}").format(channel_id))
+
+		return user_id
+
+	def raven_to_std_msg(
+		self,
+		raven_message: "RavenMessage",
+		user_id: str,
+		sender: "SenderInfo | None",
+	) -> BaseMessage:
+		provider_id = self.provider.provider_config.name
+		msg_type = raven_message.message_type
+		if msg_type == "Text":
+			return TextMessage(
+				provider=self.provider.provider_config.provider,
+				provider_id=provider_id,
+				user_id=user_id,
+				text=raven_message.content or "",
+				sender=sender,
+			)
+		file_url = raven_message.file
+		if file_url and file_url.startswith("/"):
+			file_url = get_url(file_url)
+		if msg_type == "Image":
+			return ImageMessage(
+				provider=self.provider.provider_config.provider,
+				provider_id=provider_id,
+				user_id=user_id,
+				file=FileUrl(url=file_url or ""),
+				sender=sender,
+			)
+		if msg_type == "File":
+			return FileMessage(
+				provider=self.provider.provider_config.provider,
+				provider_id=provider_id,
+				user_id=user_id,
+				file=FileUrl(url=file_url or ""),
+				sender=sender,
+			)
+
+		raise ValueError(f"Unsupported outbound message type: {msg_type}")
+
+	def get_hostname_without_port(self) -> str:
+		return get_site_name(get_host_name())
+
+	def create_customer_user(self, user_id: str, provider_id: str) -> "User":
+		provider_pk = self.get_provider_pk(provider_id)
 
 		username = frappe.generate_hash(length=10)
-		email = f"{username}@users.cafn.co"
+		hostname = self.get_hostname_without_port()
+
+		email = f"{username}@{self.provider_prefix}.{hostname}"
 
 		user = frappe.new_doc("User")
 		user.update(
@@ -108,7 +154,7 @@ class OmniChannelRavenConnector:
 		user_social_login = frappe.new_doc("User Social Login")
 		user_social_login.update(
 			{
-				"provider": provider_name,
+				"provider": provider_pk,
 				"userid": user_id,
 				"parent": user.name,
 				"parenttype": "User",
@@ -117,9 +163,40 @@ class OmniChannelRavenConnector:
 		)
 		user_social_login.insert(ignore_permissions=True)
 
-		return cast("User", user)
+		return user
 
-	def _get_or_create_raven_user(self, *, user: "User", user_id: str) -> "RavenUser":
+	def get_or_create_customer_user(self, user_id: str | None, provider_id: str) -> "User":
+		provider_pk = self.get_provider_pk(provider_id)
+
+		user_pk = frappe.db.get_value(
+			doctype="User Social Login",
+			filters={"provider": provider_pk, "userid": user_id},
+			fieldname="parent",
+		)
+
+		if user_pk:
+			return frappe.get_doc("User", user_pk)
+
+		return self.create_customer_user(user_id=user_id, provider_id=provider_id)
+
+	def create_raven_user(self, user: "User", user_id: str) -> "RavenUser":
+		user_info = self.provider.get_user_info(user_id=user_id)
+
+		raven_user = frappe.new_doc("Raven User")
+		raven_user.update(
+			{
+				"type": "Customer",
+				"user": user.name,
+				"full_name": user_info.display_name,
+				"user_image": user_info.picture_url,
+				"enabled": True,
+			}
+		)
+		raven_user.insert(ignore_permissions=True)
+
+		return raven_user
+
+	def get_or_create_raven_user(self, user: "User", user_id: str) -> "RavenUser":
 		raven_user_pk = frappe.db.get_value(
 			doctype="Raven User",
 			filters={"user": user.name},
@@ -127,25 +204,33 @@ class OmniChannelRavenConnector:
 		)
 
 		if raven_user_pk:
-			return cast("RavenUser", frappe.get_doc("Raven User", str(raven_user_pk)))
+			return frappe.get_doc("Raven User", raven_user_pk)
 
-		user_info = self.provider.get_user_info(user_id=user_id)
-		raven_user = frappe.new_doc("Raven User")
-		raven_user.update(
+		return self.create_raven_user(user=user, user_id=user_id)
+
+	def create_channel(self, raven_user: "RavenUser") -> "RavenChannel":
+		channel_name = self.get_channel_name(raven_user)
+
+		channel = frappe.new_doc("Raven Channel")
+		channel.update(
 			{
-				"type": "Customer",
-				"user": user.name,
-				"full_name": user_info["display_name"],
-				"user_image": user_info["picture_url"],
+				"channel_name": channel_name,
+				"id": channel_name,
+				"type": "Public",
+				"customer_user": raven_user.user,
+				"omni_channel_chat_provider": self.provider.provider_config.name,
+				"is_customer": True,
 				"enabled": True,
+				"workspace": self.provider.provider_config.raven_workspace,
 			}
 		)
-		raven_user.insert(ignore_permissions=True)
+		channel.insert(ignore_permissions=True)
 
-		return cast("RavenUser", raven_user)
+		return channel
 
-	def _get_or_create_channel(self, raven_user: "RavenUser") -> "RavenChannel":
-		channel_name = f"{self.chat_integration.name}_{raven_user.name}"
+	def get_or_create_channel(self, raven_user: "RavenUser") -> "RavenChannel":
+		channel_name = self.get_channel_name(raven_user)
+
 		channel_pk = frappe.db.get_value(
 			doctype="Raven Channel",
 			filters=channel_name,
@@ -153,67 +238,11 @@ class OmniChannelRavenConnector:
 		)
 
 		if channel_pk:
-			return cast("RavenChannel", frappe.get_doc("Raven Channel", str(channel_pk)))
+			return frappe.get_doc("Raven Channel", channel_pk)
 
-		return cast(
-			"RavenChannel",
-			frappe.get_doc(
-				{
-					"doctype": "Raven Channel",
-					"channel_name": channel_name,
-					"id": channel_name,
-					"type": "Public",
-					"customer_user": raven_user.user,
-					"omni_channel_chat_provider": self.chat_integration.name,
-					"is_customer": True,
-					"enabled": True,
-					"workspace": self.chat_integration.raven_workspace,
-				}
-			).insert(ignore_permissions=True),
-		)
+		return self.create_channel(raven_user)
 
-	def _get_external_user_id(self, customer_user: str) -> str:
-		"""Resolve the provider's external user_id for a given Frappe user."""
-		user_id = frappe.db.get_value(
-			doctype="User Social Login",
-			filters={
-				"provider": self.chat_integration.provider,
-				"parent": customer_user,
-			},
-			fieldname="userid",
-		)
-		if not user_id:
-			frappe.throw(
-				f"No {self.chat_integration.provider} social login found for user {customer_user}"
-			)
-		return cast(str, user_id)
-
-	# ── interface 1: provider → Raven (inbound) ─────────────────────────────
-
-	def handle_webhook(self, body: bytes, headers: dict) -> None:
-		"""Parse a raw webhook payload and persist all contained messages to Raven."""
-		messages = self.provider.extract_messages(body=body, headers=headers)
-		for message in messages:
-			self.receive_from_provider(message)
-
-	def receive_from_provider(self, message: BaseMessage) -> None:
-		"""Inbound: turn a provider webhook payload into a Raven message.
-
-		Creates the Frappe user, Raven user, and channel on first contact,
-		then appends the message to the channel.
-
-		Returns the Raven channel the message was posted to.
-		"""
-		user = self._get_or_create_customer_user(user_id=message.user_id or "")
-		frappe.set_user(str(user.name))
-
-		raven_user = self._get_or_create_raven_user(user=user, user_id=message.user_id)
-		raven_channel = self._get_or_create_channel(raven_user=raven_user)
-		self._save_inbound_message(raven_channel=raven_channel, message=message)
-
-	def _save_inbound_message(
-		self, *, raven_channel: "RavenChannel", message: BaseMessage
-	) -> None:
+	def create_raven_message(self, raven_channel: "RavenChannel", message: BaseMessage) -> None:
 		doc = frappe.new_doc(doctype="Raven Message")
 		doc.update(
 			{
@@ -224,6 +253,7 @@ class OmniChannelRavenConnector:
 				"omni_channel_msg_meta": message.metadata,
 			}
 		)
+
 		if isinstance(message, TextMessage):
 			doc.text = message.text
 		elif isinstance(message, (ImageMessage, FileMessage)) and isinstance(
@@ -239,12 +269,43 @@ class OmniChannelRavenConnector:
 			)
 			file_doc.insert(ignore_permissions=True)
 			doc.file = file_doc.file_url
+
 		doc.insert(ignore_permissions=True)
 
-	# ── interface 2: Raven → provider (outbound) ────────────────────────────
+	# ── provider → Raven (inbound) ─────────────────────────────
 
-	@classmethod
-	def push_to_provider(cls, raven_message: "RavenMessage") -> None:
+	def receive_from_provider(self, message: BaseMessage) -> None:
+		"""Inbound: turn a provider webhook payload into a Raven message.
+
+		Creates the Frappe user, Raven user, and channel on first contact,
+		then appends the message to the channel.
+
+		Returns the Raven channel the message was posted to.
+		"""
+		user_id = message.user_id
+
+		user = self.get_or_create_customer_user(
+			user_id=user_id,
+			provider_id=message.provider_id,
+		)
+
+		frappe.set_user(user.name)
+
+		raven_user = self.get_or_create_raven_user(
+			user=user,
+			user_id=user_id,
+		)
+		raven_channel = self.get_or_create_channel(
+			raven_user=raven_user,
+		)
+		self.create_raven_message(
+			raven_channel=raven_channel,
+			message=message,
+		)
+
+	# ── Raven → provider (outbound) ────────────────────────────
+
+	def push_to_provider(self, raven_message: "RavenMessage") -> None:
 		"""Outbound: forward a staff Raven message to the customer on the external provider.
 
 		Handles guard conditions, channel/provider resolution, message payload building
@@ -259,94 +320,11 @@ class OmniChannelRavenConnector:
 		):
 			return
 
-		channel = cast(
-			"dict | None",
-			frappe.db.get_value(
-				doctype="Raven Channel",
-				filters=raven_message.channel_id,
-				fieldname=["is_customer", "customer_user", "omni_channel_chat_provider"],
-				as_dict=True,
-				cache=True,
-			),
+		user_id = self.get_user_id(channel_id=raven_message.channel_id)
+		sender = self.get_sender_info(owner=raven_message.owner)
+		outbound_msg = self.raven_to_std_msg(
+			raven_message=raven_message,
+			sender=sender,
+			user_id=user_id,
 		)
-
-		if not channel or not channel["is_customer"] or not channel["omni_channel_chat_provider"]:
-			return
-
-		provider_config = frappe.get_doc(
-			"Omni Channel Chat Provider", channel["omni_channel_chat_provider"]
-		)
-		connector = cls(provider=provider_config.get_provider())
-
-		user_id = frappe.db.get_value(
-			doctype="User Social Login",
-			filters={
-				"provider": connector.chat_integration.provider,
-				"parent": channel["customer_user"],
-			},
-			fieldname="userid",
-		)
-		if not user_id:
-			return
-
-		provider_name = connector.chat_integration.provider
-		sender = _resolve_sender(raven_message.owner)
-		outbound_msg = _build_outbound_message(raven_message, sender, provider_name)
-		outbound_msg.user_id = str(user_id)
-		outbound_msg.metadata = frappe.parse_json(
-			cast(
-				str,
-				frappe.db.get_value(
-					"Raven Message",
-					filters={"channel_id": raven_message.channel_id, "is_customer_message": 1},
-					fieldname="omni_channel_msg_meta",
-					order_by="creation desc",
-				),
-			)
-		)
-
-		connector.provider.send_reply(message=outbound_msg)
-
-	@classmethod
-	def send_outbound_message(
-		cls, channel_name: str, message: BaseMessage, owner: str | None = None
-	) -> None:
-		"""Push a typed outbound message to the external provider for a given Raven channel.
-
-		Unlike push_to_provider (which is triggered by a Raven message doc), this method
-		accepts any BaseMessage directly — e.g. TrackingStatusMessage — and dispatches
-		it to the provider without creating a Raven message first.
-		"""
-		channel = cast(
-			"dict | None",
-			frappe.db.get_value(
-				doctype="Raven Channel",
-				filters=channel_name,
-				fieldname=["is_customer", "customer_user", "omni_channel_chat_provider"],
-				as_dict=True,
-			),
-		)
-		if not channel or not channel["is_customer"] or not channel["omni_channel_chat_provider"]:
-			return
-
-		provider_config = frappe.get_doc(
-			"Omni Channel Chat Provider", channel["omni_channel_chat_provider"]
-		)
-		connector = cls(provider=provider_config.get_provider())
-
-		user_id = frappe.db.get_value(
-			doctype="User Social Login",
-			filters={
-				"provider": connector.chat_integration.provider,
-				"parent": channel["customer_user"],
-			},
-			fieldname="userid",
-		)
-		if not user_id:
-			return
-
-		if message.sender is None and owner:
-			message.sender = _resolve_sender(owner)
-
-		message.user_id = str(user_id)
-		connector.provider.send_message(message=message)
+		self.provider.send_reply(message=outbound_msg)

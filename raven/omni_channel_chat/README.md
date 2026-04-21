@@ -22,7 +22,7 @@
 
 **Remark**
 
-1. Public / Private file has to be handle properly, currently files upload to raven will be private file but chat required it to be private.
+1. Public / Private file has to be handle properly, currently files upload to raven will be private file but chat required it to be private
 
 ## TODO
 
@@ -34,3 +34,10 @@
 
 - [ ] Instagram
 - [ ] WhatsApp
+
+### Misc
+
+- [ ] Outgoing messages needs message id so we could reply to it properly
+- [x] Provider from social login has to change to use provider id, using just "facebook" or "line" will cause error when there are more than 1 provider per each provider (prefix like `OCC_` should be add to provider)
+- [x] On BaseMessage `provider` should be change to `provider_id`
+- [ ] Create inject interface for connector class

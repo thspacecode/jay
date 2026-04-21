@@ -56,6 +56,8 @@ class LineMessageMixin:
 @dataclass(kw_only=True)
 class BaseMessage(ABC, LineMessageMixin):
 	provider: "ProviderType"
+
+	provider_id: str
 	user_id: str
 
 	sender: SenderInfo | None = None
