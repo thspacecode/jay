@@ -27,7 +27,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Provider",
-   "options": "\nline\nfacebook\ninstagram",
+   "options": "line\nfacebook\ninstagram",
    "reqd": 1
   },
   {
@@ -127,7 +127,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-10 14:17:07.282091",
+ "modified": "2026-04-21 10:26:22.036135",
  "modified_by": "Administrator",
  "module": "Omni-Channel Chat",
  "name": "Omni Channel Chat Provider",

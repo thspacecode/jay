@@ -26,7 +26,7 @@ class OmniChannelChatProvider(Document):
 		ig_verify_token: DF.Password | None
 		line_channel_access_token: DF.Password | None
 		line_channel_secret: DF.Password | None
-		provider: DF.Literal["", "line", "facebook", "instagram"]
+		provider: DF.Literal["line", "facebook", "instagram"]
 		raven_workspace: DF.Link
 	# end: auto-generated types
 
