@@ -34,7 +34,6 @@ class RavenMessage(Document):
 
 	if TYPE_CHECKING:
 		from frappe.types import DF
-
 		from raven.raven_messaging.doctype.raven_mention.raven_mention import RavenMention
 
 		blurhash: DF.SmallText | None
@@ -62,6 +61,7 @@ class RavenMessage(Document):
 		message_type: DF.Literal["Text", "Image", "File", "Poll", "System"]
 		notification: DF.Data | None
 		omni_channel_msg_meta: DF.JSON | None
+		omni_channel_skip_push_to_provider: DF.Check
 		poll_id: DF.Link | None
 		replied_message_details: DF.JSON | None
 		text: DF.LongText | None

@@ -59,16 +59,16 @@ class OmniChannelRavenConnector:
 	def get_channel_name(self, destination_id: str) -> str:
 		return f"{self.provider.provider_config.name}_{destination_id}"
 
-	def get_sender_info(self, owner: str) -> "UserDisplay | None":
+	def get_sender_info(self, sender: RavenUserId) -> "UserDisplay | None":
 		raven_user = frappe.db.get_value(
-			"Raven User", owner, ["full_name", "user_image"], as_dict=True
+			"Raven User", sender.user_id, ["full_name", "user_image"], as_dict=True
 		)
 		if not raven_user:
 			return None
 		icon_url = raven_user["user_image"]
 		if icon_url and icon_url.startswith("/"):
 			icon_url = get_url(icon_url)
-		return UserDisplay(name=raven_user["full_name"] or "", icon_url=icon_url or None)
+		return UserDisplay(name=raven_user["full_name"], icon_url=icon_url)
 
 	def get_user_id(self, channel_id: str) -> str:
 		"""Return the provider user_id for a 1:1 customer channel via social login lookup."""
@@ -256,19 +256,33 @@ class OmniChannelRavenConnector:
 		message: StdMessage,
 		sender_user: "User | None" = None,
 		provider_metadata: dict | None = None,
+		raven_user: "RavenUserId | None" = None,
+		raven_message_data: dict | None = None,
 	) -> None:
-		owner = sender_user.name if sender_user else raven_channel.customer_user
-
 		doc = frappe.new_doc(doctype="Raven Message")
 		doc.update(
 			{
 				"channel_id": raven_channel.name,
 				"message_type": message.type,
 				"is_customer_message": True,
-				"owner": owner,
 				"omni_channel_msg_meta": provider_metadata,
 			}
 		)
+
+		if raven_user is not None:
+			if raven_user.user_type == "Raven User":
+				doc.update(
+					{
+						"owner": raven_user.user_id,
+					}
+				)
+			elif raven_user.user_type == "Raven Bot":
+				doc.update(
+					{
+						"is_bot_message": True,
+						"bot": raven_user.user_id,
+					}
+				)
 
 		if isinstance(message, TextMessage):
 			doc.text = message.text
@@ -285,6 +299,8 @@ class OmniChannelRavenConnector:
 			)
 			file_doc.insert(ignore_permissions=True)
 			doc.file = file_doc.file_url
+
+		doc.update(raven_message_data or {})
 
 		doc.insert(ignore_permissions=True)
 
@@ -343,6 +359,7 @@ class OmniChannelRavenConnector:
 			raven_message.is_customer_message
 			or raven_message.is_bot_message
 			or raven_message.message_type in ("System", "Poll")
+			or raven_message.omni_channel_skip_push_to_provider
 		):
 			return
 
@@ -356,6 +373,40 @@ class OmniChannelRavenConnector:
 			return
 
 		destination_id = self.get_destination_id(raven_message.channel_id)
-		sender = self.get_sender_info(owner=raven_message.owner)
+		sender = self.get_sender_info(
+			owner=RavenUserId(user_type="Raven User", user_id=raven_message.owner)
+		)
 		outbound_msg = self.raven_to_std_msg(raven_message=raven_message, sender=sender)
 		self.provider.send_message(destination_id=destination_id, message=outbound_msg)
+
+	# ── Inject ─────────────────────────────────────────────────────────────────
+
+	def handle_inject(
+		self,
+		destination: ChatDestination,
+		std_message: StdMessage,
+		raven_user: RavenUserId,
+	) -> None:
+		"""Handle programmatically injected messages, e.g. from a bot or workflow.
+
+		Saves the message to the Raven channel. The after_insert hook on RavenMessage
+		automatically calls handle_outbound which pushes the message to the provider.
+		"""
+		raven_channel = self.get_or_create_channel(
+			destination=destination,
+		)
+
+		self.create_raven_message(
+			raven_channel=raven_channel,
+			message=std_message,
+			raven_user=raven_user,
+			raven_message_data={"omni_channel_skip_push_to_provider": True},
+		)
+
+		sender_info = self.get_sender_info(sender=raven_user)
+		std_message.sender = sender_info
+
+		self.provider.send_message(
+			destination_id=destination.destination_id,
+			message=std_message,
+		)

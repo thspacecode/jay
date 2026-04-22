@@ -28,7 +28,6 @@
   "last_message_timestamp",
   "dm_user_1",
   "dm_user_2",
-  "customer_user",
   "omni_channel_chat_provider",
   "omni_channel_destination_id",
   "column_break_eckt",
@@ -239,14 +238,6 @@
   },
   {
    "depends_on": "eval:doc.is_customer;",
-   "fieldname": "customer_user",
-   "fieldtype": "Link",
-   "label": "Customer",
-   "options": "Raven User",
-   "read_only": 1
-  },
-  {
-   "depends_on": "eval:doc.is_customer;",
    "fieldname": "omni_channel_chat_provider",
    "fieldtype": "Link",
    "label": "Omni Channel Chat Provider",
@@ -271,7 +262,7 @@
    "link_fieldname": "channel_id"
   }
  ],
- "modified": "2026-04-19 14:41:55.728586",
+ "modified": "2026-04-22 13:32:23.357346",
  "modified_by": "Administrator",
  "module": "Raven Channel Management",
  "name": "Raven Channel",
