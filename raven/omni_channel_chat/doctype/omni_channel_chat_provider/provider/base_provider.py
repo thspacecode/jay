@@ -47,6 +47,10 @@ class Provider(ABC, Generic[ProviderWebhookEvent]):
 		"""Fetch user display info from the provider's platform."""
 
 	@abstractmethod
+	def get_destination_display_name(self, destination: "ChatDestination") -> UserDisplay:
+		"""Return a human-readable name for the destination (e.g. group name). None if unsupported."""
+
+	@abstractmethod
 	def download_attachment(self, url: str, file_name: str | None = None) -> FileContent:
 		"""Download a file from the given URL and return its content and a file name."""
 

@@ -61,6 +61,13 @@ class LineProvider(Provider[LineEvent]):
 		headers: dict = dict(request.headers)
 		return self.handle_webhook(body=body, headers=headers, callback=callback)
 
+	def get_destination_display_name(self, destination: "ChatDestination") -> UserDisplay:
+		if destination.type != "Group":
+			return self.get_user_info(destination.destination_id, destination)
+		with ApiClient(self.config) as api_client:
+			summary = MessagingApi(api_client).get_group_summary(destination.destination_id)
+			return UserDisplay(name=summary.group_name, icon_url=None)
+
 	def get_user_info(
 		self,
 		user_id: str,

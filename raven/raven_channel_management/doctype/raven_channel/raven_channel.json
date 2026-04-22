@@ -30,6 +30,7 @@
   "dm_user_2",
   "omni_channel_chat_provider",
   "omni_channel_destination_id",
+  "omni_channel_raven_user",
   "column_break_eckt",
   "last_message_details",
   "section_break_acpc",
@@ -249,6 +250,12 @@
    "fieldtype": "Data",
    "label": "Omni Channel Destination ID",
    "read_only": 1
+  },
+  {
+   "fieldname": "omni_channel_raven_user",
+   "fieldtype": "Link",
+   "label": "Omni Channel Raven User",
+   "options": "Raven User"
   }
  ],
  "index_web_pages_for_search": 1,
@@ -262,7 +269,7 @@
    "link_fieldname": "channel_id"
   }
  ],
- "modified": "2026-04-22 13:32:23.357346",
+ "modified": "2026-04-22 16:37:37.130387",
  "modified_by": "Administrator",
  "module": "Raven Channel Management",
  "name": "Raven Channel",

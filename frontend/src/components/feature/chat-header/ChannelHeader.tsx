@@ -30,11 +30,11 @@ export const ChannelHeader = ({ channelData }: ChannelHeaderProps) => {
     const { users } = useContext(UserListContext)
 
     const customerUser = useMemo(
-        () => users.find(u => u.name === channelData.customer_user),
-        [users, channelData.customer_user]
+        () => users.find(u => u.name === channelData.omni_channel_raven_user),
+        [users, channelData.omni_channel_raven_user]
     )
 
-    const isOmniChannel = !!channelData.customer_user
+    const isOmniChannel = !!channelData.omni_channel_raven_user
     const displayName = customerUser?.full_name ?? channelData.channel_name
     const providerIcon = channelData.omni_channel_provider ? PROVIDER_ICONS[channelData.omni_channel_provider] : null
     const providerDisplayName = channelData.omni_channel_display_name ?? channelData.omni_channel_chat_provider

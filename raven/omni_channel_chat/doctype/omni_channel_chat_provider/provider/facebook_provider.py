@@ -74,6 +74,9 @@ class FacebookProvider(Provider[FacebookMessagingEvent]):
 		expected = hmac.new(self.config.app_secret.encode(), body, hashlib.sha256).hexdigest()
 		return hmac.compare_digest(expected, signature_header.removeprefix("sha256="))
 
+	def get_destination_display_name(self, destination: ChatDestination) -> UserDisplay:
+		return self.get_user_info(destination.destination_id, destination)
+
 	def get_user_info(self, user_id: str, destination: "ChatDestination") -> UserDisplay:
 		with httpx.Client() as client:
 			response = client.get(

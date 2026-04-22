@@ -51,8 +51,8 @@ export interface RavenChannel{
 	thread_bot?: string
 	/**	Is Customer : Check	*/
 	is_customer?: 0 | 1
-	/**	Customer : Link - Raven User	*/
-	customer_user?: string
 	/**	Omni Channel Chat Provider : Link - Omni Channel Chat Provider	*/
 	omni_channel_chat_provider?: string
+	/**	Raven User for Omni Channel : Link - Raven User	*/
+	omni_channel_raven_user?: string
 }

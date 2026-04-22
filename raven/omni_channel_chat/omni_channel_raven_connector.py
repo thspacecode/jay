@@ -232,6 +232,13 @@ class OmniChannelRavenConnector:
 		)
 		channel.insert(ignore_permissions=True)
 
+		channel_display = self.provider.get_destination_display_name(destination=destination)
+		channel.update(
+			{
+				"channel_name": channel_display.name,
+			}
+		)
+
 		return channel
 
 	def get_or_create_channel(self, destination: ChatDestination) -> "RavenChannel":

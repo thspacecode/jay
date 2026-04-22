@@ -134,7 +134,7 @@ const OmniChannelItemRow = ({ channel, showProvider }: { channel: OmniChannelIte
     const { users } = useContext(UserListContext)
     const { channelID } = useParams()
 
-    const customerUser = useMemo(() => users.find(u => u.name === channel.customer_user), [users, channel.customer_user])
+    const customerUser = useMemo(() => users.find(u => u.name === channel.omni_channel_raven_user), [users, channel.omni_channel_raven_user])
 
     const displayName = customerUser?.full_name ?? channel.channel_name
     const showUnread = channel.unread_count > 0 && channelID !== channel.name

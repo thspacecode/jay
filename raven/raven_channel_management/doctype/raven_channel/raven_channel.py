@@ -36,6 +36,7 @@ class RavenChannel(Document):
 		linked_document: DF.DynamicLink | None
 		omni_channel_chat_provider: DF.Link | None
 		omni_channel_destination_id: DF.Data | None
+		omni_channel_raven_user: DF.Link | None
 		openai_thread_id: DF.Data | None
 		pinned_messages: DF.Table[RavenPinnedMessages]
 		pinned_messages_string: DF.SmallText | None
