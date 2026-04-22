@@ -30,6 +30,7 @@
   "dm_user_2",
   "customer_user",
   "omni_channel_chat_provider",
+  "omni_channel_destination_id",
   "column_break_eckt",
   "last_message_details",
   "section_break_acpc",
@@ -250,6 +251,13 @@
    "fieldtype": "Link",
    "label": "Omni Channel Chat Provider",
    "options": "Omni Channel Chat Provider"
+  },
+  {
+   "depends_on": "eval:doc.is_customer;",
+   "fieldname": "omni_channel_destination_id",
+   "fieldtype": "Data",
+   "label": "Omni Channel Destination ID",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,

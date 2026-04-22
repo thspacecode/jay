@@ -12,12 +12,14 @@ from raven.omni_channel_chat.doctype.omni_channel_chat_provider.provider import 
 	Provider,
 )
 from raven.omni_channel_chat.models.message import (
-	BaseMessage,
+	ChatDestination,
 	FileContent,
 	FileMessage,
 	ImageMessage,
+	StdInboundEvent,
+	StdMessage,
 	TextMessage,
-	UserInfo,
+	UserDisplay,
 )
 
 # A "messaging event" dict from the Facebook webhook payload
@@ -52,7 +54,9 @@ class FacebookProvider(Provider[FacebookMessagingEvent]):
 		else:
 			frappe.throw("Verification failed", frappe.PermissionError)
 
-	def handle_frappe_api(self, callback: Callable[[BaseMessage], None]) -> Response:
+	def handle_frappe_api(
+		self, callback: Callable[[ChatDestination, str, StdMessage], None]
+	) -> Response:
 		request = frappe.local.request
 
 		if request.method == "GET":
@@ -70,7 +74,7 @@ class FacebookProvider(Provider[FacebookMessagingEvent]):
 		expected = hmac.new(self.config.app_secret.encode(), body, hashlib.sha256).hexdigest()
 		return hmac.compare_digest(expected, signature_header.removeprefix("sha256="))
 
-	def get_user_info(self, user_id: str) -> UserInfo:
+	def get_user_info(self, user_id: str, destination: "ChatDestination") -> UserDisplay:
 		with httpx.Client() as client:
 			response = client.get(
 				f"{self.fb_api_url}/{user_id}",
@@ -81,29 +85,31 @@ class FacebookProvider(Provider[FacebookMessagingEvent]):
 			)
 			response.raise_for_status()
 			data = response.json()
-			return UserInfo(
-				user_id=user_id,
-				display_name=data.get("name"),
-				picture_url=data.get("picture", {}).get("data", {}).get("url"),
+			return UserDisplay(
+				name=data.get("name") or "",
+				icon_url=data.get("picture", {}).get("data", {}).get("url"),
 			)
 
-	def show_typing(self, user_id: str) -> None:
+	def show_typing(self, destination_id: str) -> None:
 		with httpx.Client() as client:
 			client.post(
 				f"{self.fb_api_url}/me/messages",
 				params={"access_token": self.config.page_access_token},
-				json={"recipient": {"id": user_id}, "sender_action": "typing_on"},
+				json={"recipient": {"id": destination_id}, "sender_action": "typing_on"},
 			)
 
-	def send_reply(self, message: BaseMessage) -> None:
-		self.send_message(message)
+	def send_reply(self, destination_id: str, message: StdMessage) -> None:
+		self.send_message(destination_id, message)
 
-	def send_message(self, message: BaseMessage) -> None:
+	def send_message(self, destination_id: str, message: StdMessage) -> None:
 		with httpx.Client() as client:
 			client.post(
 				f"{self.fb_api_url}/me/messages",
 				params={"access_token": self.config.page_access_token},
-				json={"recipient": {"id": message.user_id}, "message": message.to_provider()},
+				json={
+					"recipient": {"id": destination_id},
+					"message": message.to_provider(provider_type=self.provider_config.provider),
+				},
 			)
 
 	def download_attachment(self, url: str, file_name: str | None = None) -> FileContent:
@@ -116,22 +122,19 @@ class FacebookProvider(Provider[FacebookMessagingEvent]):
 				file_name = content_disposition.split("filename=")[-1].strip('" ')
 			return FileContent(file_name=file_name, file_content=response.content)
 
-	def event_mapper(self, event: FacebookMessagingEvent) -> BaseMessage | None:
+	def event_mapper(self, event: FacebookMessagingEvent) -> StdInboundEvent | None:
 		message = event.get("message")
 		if message is None:
 			return None
 
-		mid = message.get("mid")
 		user_id = event["sender"]["id"]
-		metadata = {"mid": mid}
+		destination = ChatDestination(type="User", destination_id=user_id)
 
 		if "text" in message:
-			return TextMessage(
-				provider=self.provider_config.provider,
-				provider_id=self.provider_config.name,
-				user_id=user_id,
-				metadata=metadata,
-				text=message["text"],
+			return StdInboundEvent(
+				destination=destination,
+				sender_id=user_id,
+				message=TextMessage(text=message["text"]),
 			)
 
 		for attachment in message.get("attachments") or []:
@@ -140,33 +143,29 @@ class FacebookProvider(Provider[FacebookMessagingEvent]):
 			if not url:
 				continue
 			if att_type == "image":
-				return ImageMessage(
-					provider=self.provider_config.provider,
-					provider_id=self.provider_config.name,
-					user_id=user_id,
-					metadata=metadata,
-					file=self.download_attachment(url),
+				return StdInboundEvent(
+					destination=destination,
+					sender_id=user_id,
+					message=ImageMessage(file=self.download_attachment(url)),
 				)
 			if att_type in ("file", "document"):
-				return FileMessage(
-					provider=self.provider_config.provider,
-					provider_id=self.provider_config.name,
-					user_id=user_id,
-					metadata=metadata,
-					file=self.download_attachment(url),
+				return StdInboundEvent(
+					destination=destination,
+					sender_id=user_id,
+					message=FileMessage(file=self.download_attachment(url)),
 				)
 
 		return None
 
-	def standardize_events(self, events: list[FacebookMessagingEvent]) -> list[BaseMessage]:
-		std_events: list[BaseMessage] = []
+	def standardize_events(self, events: list[FacebookMessagingEvent]) -> list[StdInboundEvent]:
+		result: list[StdInboundEvent] = []
 		for event in events:
-			std_event = self.event_mapper(event)
-			if std_event:
-				std_events.append(std_event)
-		return std_events
+			mapped = self.event_mapper(event)
+			if mapped:
+				result.append(mapped)
+		return result
 
-	def extract_messages(self, body: bytes, headers: dict) -> list[BaseMessage]:
+	def extract_messages(self, body: bytes, headers: dict) -> list[StdInboundEvent]:
 		signature = headers.get("X-Hub-Signature-256", "") or headers.get(
 			"x-hub-signature-256", ""
 		)

@@ -8,21 +8,29 @@ from linebot.v3.messaging import (
 	MessagingApi,
 	MessagingApiBlob,
 	PushMessageRequest,
-	ReplyMessageRequest,
 	ShowLoadingAnimationRequest,
 )
+from linebot.v3.messaging.exceptions import NotFoundException
 from linebot.v3.webhook import WebhookParser
 from linebot.v3.webhooks import Event as LineEvent
-from linebot.v3.webhooks import FileMessageContent, ImageMessageContent, TextMessageContent
+from linebot.v3.webhooks import (
+	FileMessageContent,
+	GroupSource,
+	ImageMessageContent,
+	RoomSource,
+	TextMessageContent,
+)
 from linebot.v3.webhooks import MessageEvent as LineMessageEvent
 from werkzeug.wrappers import Response
 
 from raven.omni_channel_chat.models.message import (
-	BaseMessage,
+	ChatDestination,
 	FileContent,
 	FileMessage,
 	ImageMessage,
-	UserInfo,
+	StdInboundEvent,
+	StdMessage,
+	UserDisplay,
 )
 from raven.omni_channel_chat.models.message import (
 	TextMessage as StdTextMessage,
@@ -45,48 +53,53 @@ class LineProvider(Provider[LineEvent]):
 			channel_secret=self.provider_config.line_channel_secret,
 		)
 
-	def handle_frappe_api(self, callback: Callable[[BaseMessage], None]) -> Response:
+	def handle_frappe_api(
+		self, callback: Callable[[ChatDestination, str, StdMessage], None]
+	) -> Response:
 		request = frappe.local.request
 		body: bytes = request.get_data()
 		headers: dict = dict(request.headers)
 		return self.handle_webhook(body=body, headers=headers, callback=callback)
 
-	def get_user_info(self, user_id: str) -> UserInfo:
+	def get_user_info(
+		self,
+		user_id: str,
+		destination: "ChatDestination",
+	) -> UserDisplay:
 		with ApiClient(self.config) as api_client:
-			profile = MessagingApi(api_client).get_profile(user_id)
-			return UserInfo(
-				user_id=profile.user_id,
-				display_name=profile.display_name,
-				picture_url=profile.picture_url,
-			)
+			api = MessagingApi(api_client)
+			if destination and destination.type == "Group":
+				try:
+					profile = api.get_group_member_profile(destination.destination_id, user_id)
+					return UserDisplay(
+						name=profile.display_name,
+						icon_url=profile.picture_url,
+					)
+				except NotFoundException:
+					return UserDisplay(name=user_id, icon_url=None)
+			try:
+				profile = api.get_profile(user_id)
+				return UserDisplay(
+					name=profile.display_name,
+					icon_url=profile.picture_url,
+				)
+			except NotFoundException:
+				return UserDisplay(name=user_id, icon_url=None)
 
-	def show_typing(self, user_id: str) -> None:
+	def show_typing(self, destination_id: str) -> None:
 		with ApiClient(self.config) as api_client:
 			MessagingApi(api_client).show_loading_animation(
-				ShowLoadingAnimationRequest(chatId=user_id, loadingSeconds=60)
+				ShowLoadingAnimationRequest(chatId=destination_id, loadingSeconds=60)
 			)
 
-	def send_reply(self, message: BaseMessage) -> None:
-		reply_token = (message.metadata or {}).get("reply_token")
-		line_msg = message.to_provider()
-		if reply_token:
-			try:
-				with ApiClient(self.config) as api_client:
-					MessagingApi(api_client).reply_message(
-						ReplyMessageRequest(reply_token=reply_token, messages=[line_msg])
-					)
-				return
-			except Exception:
-				pass
-		with ApiClient(self.config) as api_client:
-			MessagingApi(api_client).push_message(
-				PushMessageRequest(to=message.user_id, messages=[line_msg])
-			)
+	def send_reply(self, destination_id: str, message: StdMessage) -> None:
+		self.send_message(destination_id, message)
 
-	def send_message(self, message: BaseMessage) -> None:
+	def send_message(self, destination_id: str, message: StdMessage) -> None:
+		line_msg = message.to_provider(provider_type=self.provider_config.provider)
 		with ApiClient(self.config) as api_client:
 			MessagingApi(api_client).push_message(
-				PushMessageRequest(to=message.user_id, messages=[message.to_line()])
+				PushMessageRequest(to=destination_id, messages=[line_msg])
 			)
 
 	def download_attachment(self, message_id: str, file_name: str | None = None) -> FileContent:
@@ -94,52 +107,53 @@ class LineProvider(Provider[LineEvent]):
 			content = bytes(MessagingApiBlob(api_client).get_message_content(message_id))
 			return FileContent(file_name=file_name or "attachment", file_content=content)
 
-	def event_mapper(self, event: LineEvent) -> BaseMessage | None:
+	def event_mapper(self, event: LineEvent) -> StdInboundEvent | None:
 		if not isinstance(event, LineMessageEvent):
 			return None
 
 		msg = event.message
-		metadata = {"message_id": msg.id, "reply_token": event.reply_token}
-		user_id = event.source.user_id
+		source = event.source
+
+		if isinstance(source, GroupSource):
+			destination = ChatDestination(type="Group", destination_id=source.group_id)
+		elif isinstance(source, RoomSource):
+			destination = ChatDestination(type="Group", destination_id=source.room_id)
+		else:
+			destination = ChatDestination(type="User", destination_id=source.user_id)
+
+		provider_user = source.user_id
 
 		if isinstance(msg, TextMessageContent):
-			return StdTextMessage(
-				provider=self.provider_config.provider,
-				provider_id=self.provider_config.name,
-				user_id=user_id,
-				metadata=metadata,
-				text=msg.text,
+			return StdInboundEvent(
+				destination=destination,
+				sender_id=provider_user,
+				message=StdTextMessage(text=msg.text),
 			)
 
 		if isinstance(msg, ImageMessageContent):
-			return ImageMessage(
-				provider=self.provider_config.provider,
-				provider_id=self.provider_config.name,
-				user_id=user_id,
-				metadata=metadata,
-				file=self.download_attachment(msg.id, f"{msg.id}.jpg"),
+			return StdInboundEvent(
+				destination=destination,
+				sender_id=provider_user,
+				message=ImageMessage(file=self.download_attachment(msg.id, f"{msg.id}.jpg")),
 			)
-
 		if isinstance(msg, FileMessageContent):
-			return FileMessage(
-				provider=self.provider_config.provider,
-				provider_id=self.provider_config.name,
-				user_id=user_id,
-				metadata=metadata,
-				file=self.download_attachment(msg.id, msg.file_name),
+			return StdInboundEvent(
+				destination=destination,
+				sender_id=provider_user,
+				message=FileMessage(file=self.download_attachment(msg.id, msg.file_name)),
 			)
 
 		return None
 
-	def standardize_events(self, events: list[LineEvent]) -> list[BaseMessage]:
-		std_events: list[BaseMessage] = []
+	def standardize_events(self, events: list[LineEvent]) -> list[StdInboundEvent]:
+		result: list[StdInboundEvent] = []
 		for event in events:
-			std_event = self.event_mapper(event)
-			if std_event:
-				std_events.append(std_event)
-		return std_events
+			mapped = self.event_mapper(event)
+			if mapped:
+				result.append(mapped)
+		return result
 
-	def extract_messages(self, body: bytes, headers: dict) -> list[BaseMessage]:
+	def extract_messages(self, body: bytes, headers: dict) -> list[StdInboundEvent]:
 		signature = headers.get("x-line-signature", "") or headers.get("X-Line-Signature", "")
 		try:
 			events = self.parser.parse(body=body.decode(), signature=signature, as_payload=False)

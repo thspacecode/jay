@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import frappe
 from frappe import _
@@ -8,13 +8,15 @@ from raven.omni_channel_chat.doctype.omni_channel_chat_provider.omni_channel_cha
 	get_omni_channel_chat_provider,
 )
 from raven.omni_channel_chat.models.message import (
-	BaseMessage,
+	ChatDestination,
 	FileContent,
 	FileMessage,
 	FileUrl,
 	ImageMessage,
-	SenderInfo,
+	RavenUserId,
+	StdMessage,
 	TextMessage,
+	UserDisplay,
 )
 
 if TYPE_CHECKING:
@@ -54,22 +56,22 @@ class OmniChannelRavenConnector:
 	def get_provider_pk(self, provider_id: str) -> str:
 		return f"{self.provider_prefix}_{provider_id}"
 
-	def get_channel_name(self, raven_user: "RavenUser") -> str:
-		return f"{self.provider.provider_config.name}_{raven_user.name}"
+	def get_channel_name(self, destination_id: str) -> str:
+		return f"{self.provider.provider_config.name}_{destination_id}"
 
-	def get_sender_info(self, owner: str) -> "SenderInfo | None":
-		raven_user = cast(
-			"dict | None",
-			frappe.db.get_value("Raven User", owner, ["full_name", "user_image"], as_dict=True),
+	def get_sender_info(self, owner: str) -> "UserDisplay | None":
+		raven_user = frappe.db.get_value(
+			"Raven User", owner, ["full_name", "user_image"], as_dict=True
 		)
 		if not raven_user:
 			return None
-		avatar_url = cast("str | None", raven_user["user_image"])
-		if avatar_url and avatar_url.startswith("/"):
-			avatar_url = get_url(avatar_url)
-		return SenderInfo(name=raven_user["full_name"] or "", icon_url=avatar_url or None)
+		icon_url = raven_user["user_image"]
+		if icon_url and icon_url.startswith("/"):
+			icon_url = get_url(icon_url)
+		return UserDisplay(name=raven_user["full_name"] or "", icon_url=icon_url or None)
 
 	def get_user_id(self, channel_id: str) -> str:
+		"""Return the provider user_id for a 1:1 customer channel via social login lookup."""
 		channel_user = frappe.db.get_value(
 			doctype="Raven Channel",
 			filters=channel_id,
@@ -90,19 +92,23 @@ class OmniChannelRavenConnector:
 
 		return user_id
 
+	def get_destination_id(self, channel_id: str) -> str | None:
+		"""Return the provider destination_id (user_id or group_id) for outbound routing."""
+		destination_id = frappe.db.get_value(
+			doctype="Raven Channel",
+			filters=channel_id,
+			fieldname="omni_channel_destination_id",
+		)
+		return destination_id
+
 	def raven_to_std_msg(
 		self,
 		raven_message: "RavenMessage",
-		user_id: str,
-		sender: "SenderInfo | None",
-	) -> BaseMessage:
-		provider_id = self.provider.provider_config.name
+		sender: "UserDisplay | None",
+	) -> StdMessage:
 		msg_type = raven_message.message_type
 		if msg_type == "Text":
 			return TextMessage(
-				provider=self.provider.provider_config.provider,
-				provider_id=provider_id,
-				user_id=user_id,
 				text=raven_message.content or "",
 				sender=sender,
 			)
@@ -111,18 +117,12 @@ class OmniChannelRavenConnector:
 			file_url = get_url(file_url)
 		if msg_type == "Image":
 			return ImageMessage(
-				provider=self.provider.provider_config.provider,
-				provider_id=provider_id,
-				user_id=user_id,
-				file=FileUrl(url=file_url or ""),
+				file=FileUrl(url=file_url),
 				sender=sender,
 			)
 		if msg_type == "File":
 			return FileMessage(
-				provider=self.provider.provider_config.provider,
-				provider_id=provider_id,
-				user_id=user_id,
-				file=FileUrl(url=file_url or ""),
+				file=FileUrl(url=file_url),
 				sender=sender,
 			)
 
@@ -179,16 +179,18 @@ class OmniChannelRavenConnector:
 
 		return self.create_customer_user(user_id=user_id, provider_id=provider_id)
 
-	def create_raven_user(self, user: "User", user_id: str) -> "RavenUser":
-		user_info = self.provider.get_user_info(user_id=user_id)
+	def create_raven_user(
+		self, user: "User", user_id: str, destination: "ChatDestination | None" = None
+	) -> "RavenUser":
+		user_info = self.provider.get_user_info(user_id=user_id, destination=destination)
 
 		raven_user = frappe.new_doc("Raven User")
 		raven_user.update(
 			{
 				"type": "Customer",
 				"user": user.name,
-				"full_name": user_info.display_name,
-				"user_image": user_info.picture_url,
+				"full_name": user_info.name,
+				"user_image": user_info.icon_url,
 				"enabled": True,
 			}
 		)
@@ -196,7 +198,9 @@ class OmniChannelRavenConnector:
 
 		return raven_user
 
-	def get_or_create_raven_user(self, user: "User", user_id: str) -> "RavenUser":
+	def get_or_create_raven_user(
+		self, user: "User", user_id: str, destination: "ChatDestination | None" = None
+	) -> "RavenUser":
 		raven_user_pk = frappe.db.get_value(
 			doctype="Raven User",
 			filters={"user": user.name},
@@ -206,10 +210,12 @@ class OmniChannelRavenConnector:
 		if raven_user_pk:
 			return frappe.get_doc("Raven User", raven_user_pk)
 
-		return self.create_raven_user(user=user, user_id=user_id)
+		return self.create_raven_user(user=user, user_id=user_id, destination=destination)
 
-	def create_channel(self, raven_user: "RavenUser") -> "RavenChannel":
-		channel_name = self.get_channel_name(raven_user)
+	def create_channel(self, destination: ChatDestination) -> "RavenChannel":
+		channel_name = self.get_channel_name(
+			destination_id=destination.destination_id,
+		)
 
 		channel = frappe.new_doc("Raven Channel")
 		channel.update(
@@ -217,8 +223,8 @@ class OmniChannelRavenConnector:
 				"channel_name": channel_name,
 				"id": channel_name,
 				"type": "Public",
-				"customer_user": raven_user.user,
 				"omni_channel_chat_provider": self.provider.provider_config.name,
+				"omni_channel_destination_id": destination.destination_id,
 				"is_customer": True,
 				"enabled": True,
 				"workspace": self.provider.provider_config.raven_workspace,
@@ -228,8 +234,10 @@ class OmniChannelRavenConnector:
 
 		return channel
 
-	def get_or_create_channel(self, raven_user: "RavenUser") -> "RavenChannel":
-		channel_name = self.get_channel_name(raven_user)
+	def get_or_create_channel(self, destination: ChatDestination) -> "RavenChannel":
+		channel_name = self.get_channel_name(
+			destination_id=destination.destination_id,
+		)
 
 		channel_pk = frappe.db.get_value(
 			doctype="Raven Channel",
@@ -240,17 +248,25 @@ class OmniChannelRavenConnector:
 		if channel_pk:
 			return frappe.get_doc("Raven Channel", channel_pk)
 
-		return self.create_channel(raven_user)
+		return self.create_channel(destination=destination)
 
-	def create_raven_message(self, raven_channel: "RavenChannel", message: BaseMessage) -> None:
+	def create_raven_message(
+		self,
+		raven_channel: "RavenChannel",
+		message: StdMessage,
+		sender_user: "User | None" = None,
+		provider_metadata: dict | None = None,
+	) -> None:
+		owner = sender_user.name if sender_user else raven_channel.customer_user
+
 		doc = frappe.new_doc(doctype="Raven Message")
 		doc.update(
 			{
 				"channel_id": raven_channel.name,
 				"message_type": message.type,
 				"is_customer_message": True,
-				"owner": raven_channel.customer_user,
-				"omni_channel_msg_meta": message.metadata,
+				"owner": owner,
+				"omni_channel_msg_meta": provider_metadata,
 			}
 		)
 
@@ -272,46 +288,56 @@ class OmniChannelRavenConnector:
 
 		doc.insert(ignore_permissions=True)
 
-	# ── provider → Raven (inbound) ─────────────────────────────
+	# ── Provider Message → Raven Message (inbound) ─────────────────────────────
 
-	def handle_inbound(self, message: BaseMessage) -> None:
+	def handle_inbound(
+		self,
+		destination: ChatDestination,
+		sender_id: str,
+		std_message: StdMessage,
+	) -> None:
 		"""Inbound: turn a provider webhook payload into a Raven message.
 
 		Creates the Frappe user, Raven user, and channel on first contact,
 		then appends the message to the channel.
-
-		Returns the Raven channel the message was posted to.
 		"""
-		user_id = message.user_id
-
 		user = self.get_or_create_customer_user(
-			user_id=user_id,
-			provider_id=message.provider_id,
+			user_id=sender_id,
+			provider_id=self.provider.provider_config.name,
+		)
+
+		self.get_or_create_raven_user(
+			user=user,
+			user_id=sender_id,
+			destination=destination,
 		)
 
 		frappe.set_user(user.name)
 
-		raven_user = self.get_or_create_raven_user(
-			user=user,
-			user_id=user_id,
-		)
 		raven_channel = self.get_or_create_channel(
-			raven_user=raven_user,
-		)
-		self.create_raven_message(
-			raven_channel=raven_channel,
-			message=message,
+			destination=destination,
 		)
 
-	# ── Raven → provider (outbound) ────────────────────────────
+		provider_metadata = {
+			"provider_user_id": sender_id,
+			"destination_id": destination.destination_id,
+			"destination_type": destination.type,
+		}
+
+		self.create_raven_message(
+			raven_channel=raven_channel,
+			message=std_message,
+			sender_user=user,
+			provider_metadata=provider_metadata,
+		)
+
+	# ── Raven Message → Provider Message (outbound) ────────────────────────────
 
 	def handle_outbound(self, raven_message: "RavenMessage") -> None:
 		"""Outbound: forward a staff Raven message to the customer on the external provider.
 
-		Handles guard conditions, channel/provider resolution, message payload building
-		(text + sender avatar), reply-context fetch (e.g. LINE reply token), and dispatch.
-		Does nothing if the message is from a customer, a bot, or is a system message,
-		or if the channel is not an omni-channel customer channel.
+		Skips messages that are from customers, bots, or system/poll types,
+		and channels that are not omni-channel customer channels.
 		"""
 		if (
 			raven_message.is_customer_message
@@ -320,11 +346,16 @@ class OmniChannelRavenConnector:
 		):
 			return
 
-		user_id = self.get_user_id(channel_id=raven_message.channel_id)
-		sender = self.get_sender_info(owner=raven_message.owner)
-		outbound_msg = self.raven_to_std_msg(
-			raven_message=raven_message,
-			sender=sender,
-			user_id=user_id,
+		channel = frappe.db.get_value(
+			doctype="Raven Channel",
+			filters=raven_message.channel_id,
+			fieldname=["is_customer", "omni_channel_destination_id"],
+			as_dict=True,
 		)
-		self.provider.send_reply(message=outbound_msg)
+		if not channel or not channel.is_customer:
+			return
+
+		destination_id = self.get_destination_id(raven_message.channel_id)
+		sender = self.get_sender_info(owner=raven_message.owner)
+		outbound_msg = self.raven_to_std_msg(raven_message=raven_message, sender=sender)
+		self.provider.send_message(destination_id=destination_id, message=outbound_msg)

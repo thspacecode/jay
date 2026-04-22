@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Literal
 
 from linebot.v3.messaging import (
 	ImageMessage as LineImageMessage,
@@ -22,21 +22,33 @@ if TYPE_CHECKING:
 	MessageType = RavenMessage.message_type
 
 # ---
-# BASE MESSAGE CLASSES
+# IDENTITY / ROUTING TYPES
 # ---
 
 
 @dataclass(kw_only=True)
-class UserInfo:
-	user_id: str
-	display_name: str
-	picture_url: str | None = None
+class ChatDestination:
+	type: Literal["Group", "User"]
+	destination_id: str
 
 
 @dataclass(kw_only=True)
-class SenderInfo:
+class RavenUserId:
+	user_id: str
+	user_type: Literal["Raven User", "Raven Bot"]
+
+
+@dataclass(kw_only=True)
+class UserDisplay:
 	name: str
 	icon_url: str | None = None
+
+
+@dataclass(kw_only=True)
+class StdInboundEvent:
+	destination: ChatDestination
+	sender_id: str
+	message: "StdMessage"
 
 
 # ---
@@ -45,7 +57,7 @@ class SenderInfo:
 
 
 class LineMessageMixin:
-	sender: "SenderInfo | None"
+	sender: "UserDisplay | None"
 
 	def build_line_sender(self) -> LineSender | None:
 		if self.sender is not None:
@@ -54,15 +66,8 @@ class LineMessageMixin:
 
 
 @dataclass(kw_only=True)
-class BaseMessage(ABC, LineMessageMixin):
-	provider: "ProviderType"
-
-	provider_id: str
-	user_id: str
-
-	sender: SenderInfo | None = None
-
-	metadata: dict | None = None
+class StdMessage(ABC, LineMessageMixin):
+	sender: UserDisplay | None = None
 
 	@property
 	@abstractmethod
@@ -74,11 +79,11 @@ class BaseMessage(ABC, LineMessageMixin):
 	def provider_mapping(self) -> dict["ProviderType", Callable[[], dict]]:
 		"""Mapping of provider to a callable that converts the message to the provider format."""
 
-	def to_provider(self) -> Any:
-		if self.provider not in self.provider_mapping:
+	def to_provider(self, provider_type: "ProviderType") -> Any:
+		if provider_type not in self.provider_mapping:
 			raise NotImplementedError("Provider not implemented.")
 
-		return self.provider_mapping[self.provider]()
+		return self.provider_mapping[provider_type]()
 
 
 @dataclass(kw_only=True)
@@ -101,7 +106,7 @@ File = FileUrl | FileContent
 
 
 @dataclass(kw_only=True)
-class TextMessage(BaseMessage):
+class TextMessage(StdMessage):
 	text: str
 
 	@property
@@ -123,7 +128,7 @@ class TextMessage(BaseMessage):
 
 
 @dataclass(kw_only=True)
-class FileMessage(BaseMessage):
+class FileMessage(StdMessage):
 	file: File
 
 	@property
@@ -158,7 +163,7 @@ class FileMessage(BaseMessage):
 
 
 @dataclass(kw_only=True)
-class ImageMessage(BaseMessage):
+class ImageMessage(StdMessage):
 	file: File
 
 	@property
