@@ -212,10 +212,16 @@ class OmniChannelRavenConnector:
 
 		return self.create_raven_user(user=user, user_id=user_id, destination=destination)
 
-	def create_channel(self, destination: ChatDestination) -> "RavenChannel":
+	def create_channel(
+		self, destination: ChatDestination, raven_user: "RavenUser | None" = None
+	) -> "RavenChannel":
 		channel_name = self.get_channel_name(
 			destination_id=destination.destination_id,
 		)
+
+		omni_channel_raven_user = None
+		if raven_user and destination.type == "User":
+			omni_channel_raven_user = raven_user.name
 
 		channel = frappe.new_doc("Raven Channel")
 		channel.update(
@@ -225,6 +231,7 @@ class OmniChannelRavenConnector:
 				"type": "Public",
 				"omni_channel_chat_provider": self.provider.provider_config.name,
 				"omni_channel_destination_id": destination.destination_id,
+				"omni_channel_raven_user": omni_channel_raven_user,
 				"is_customer": True,
 				"enabled": True,
 				"workspace": self.provider.provider_config.raven_workspace,
@@ -238,10 +245,13 @@ class OmniChannelRavenConnector:
 				"channel_name": channel_display.name,
 			}
 		)
+		channel.save(ignore_permissions=True)
 
 		return channel
 
-	def get_or_create_channel(self, destination: ChatDestination) -> "RavenChannel":
+	def get_or_create_channel(
+		self, destination: ChatDestination, raven_user: "RavenUser | None" = None
+	) -> "RavenChannel":
 		channel_name = self.get_channel_name(
 			destination_id=destination.destination_id,
 		)
@@ -255,7 +265,7 @@ class OmniChannelRavenConnector:
 		if channel_pk:
 			return frappe.get_doc("Raven Channel", channel_pk)
 
-		return self.create_channel(destination=destination)
+		return self.create_channel(destination=destination, raven_user=raven_user)
 
 	def create_raven_message(
 		self,
@@ -329,7 +339,7 @@ class OmniChannelRavenConnector:
 			provider_id=self.provider.provider_config.name,
 		)
 
-		self.get_or_create_raven_user(
+		raven_user = self.get_or_create_raven_user(
 			user=user,
 			user_id=sender_id,
 			destination=destination,
@@ -339,6 +349,7 @@ class OmniChannelRavenConnector:
 
 		raven_channel = self.get_or_create_channel(
 			destination=destination,
+			raven_user=raven_user,
 		)
 
 		provider_metadata = {
@@ -381,7 +392,7 @@ class OmniChannelRavenConnector:
 
 		destination_id = self.get_destination_id(raven_message.channel_id)
 		sender = self.get_sender_info(
-			owner=RavenUserId(user_type="Raven User", user_id=raven_message.owner)
+			sender=RavenUserId(user_type="Raven User", user_id=raven_message.owner)
 		)
 		outbound_msg = self.raven_to_std_msg(raven_message=raven_message, sender=sender)
 		self.provider.send_message(destination_id=destination_id, message=outbound_msg)
