@@ -723,7 +723,7 @@ class RavenMessage(Document):
 
 		provider = OmniChannelRavenConnector.get_provider_from_channel(self.channel_id)
 		connector = OmniChannelRavenConnector(provider=provider)
-		connector.push_to_provider(raven_message=self)
+		connector.handle_outbound(raven_message=self)
 
 
 def on_doctype_update():

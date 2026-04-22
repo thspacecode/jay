@@ -35,4 +35,4 @@ def handle() -> Response:
 	provider = get_omni_channel_chat_provider(slug=slug)
 	connector = OmniChannelRavenConnector(provider=provider)
 
-	return provider.handle_frappe_api(callback=connector.receive_from_provider)
+	return provider.handle_frappe_api(callback=connector.handle_inbound)

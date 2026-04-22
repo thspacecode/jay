@@ -274,7 +274,7 @@ class OmniChannelRavenConnector:
 
 	# ── provider → Raven (inbound) ─────────────────────────────
 
-	def receive_from_provider(self, message: BaseMessage) -> None:
+	def handle_inbound(self, message: BaseMessage) -> None:
 		"""Inbound: turn a provider webhook payload into a Raven message.
 
 		Creates the Frappe user, Raven user, and channel on first contact,
@@ -305,7 +305,7 @@ class OmniChannelRavenConnector:
 
 	# ── Raven → provider (outbound) ────────────────────────────
 
-	def push_to_provider(self, raven_message: "RavenMessage") -> None:
+	def handle_outbound(self, raven_message: "RavenMessage") -> None:
 		"""Outbound: forward a staff Raven message to the customer on the external provider.
 
 		Handles guard conditions, channel/provider resolution, message payload building
