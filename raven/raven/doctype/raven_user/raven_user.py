@@ -14,7 +14,6 @@ class RavenUser(Document):
 
 	if TYPE_CHECKING:
 		from frappe.types import DF
-
 		from raven.raven.doctype.raven_pinned_channels.raven_pinned_channels import RavenPinnedChannels
 
 		availability_status: DF.Literal["", "Available", "Away", "Do not disturb", "Invisible"]
@@ -26,7 +25,7 @@ class RavenUser(Document):
 		full_name: DF.Data
 		last_mention_viewed_on: DF.Datetime | None
 		pinned_channels: DF.Table[RavenPinnedChannels]
-		type: DF.Literal["User", "Bot"]
+		type: DF.Literal["User", "Bot", "Customer", "Customer Bot"]
 		user: DF.Link | None
 		user_image: DF.AttachImage | None
 	# end: auto-generated types

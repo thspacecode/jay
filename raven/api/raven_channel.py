@@ -45,8 +45,8 @@ def get_channel_list(hide_archived: bool = False):
 	"""
 	channel = frappe.qb.DocType("Raven Channel")
 	channel_member = frappe.qb.DocType("Raven Channel Member")
-
 	workspace_member = frappe.qb.DocType("Raven Workspace Member")
+	omni_provider = frappe.qb.DocType("Omni Channel Chat Provider")
 
 	query = (
 		frappe.qb.from_(channel)
@@ -64,6 +64,10 @@ def get_channel_list(hide_archived: bool = False):
 			channel.last_message_details,
 			channel.pinned_messages_string,
 			channel.workspace,
+			channel.omni_channel_chat_provider,
+			channel.omni_channel_raven_user,
+			omni_provider.display_name.as_("omni_channel_display_name"),
+			omni_provider.provider.as_("omni_channel_provider"),
 			channel_member.name.as_("member_id"),
 		)
 		.left_join(channel_member)
@@ -75,6 +79,8 @@ def get_channel_list(hide_archived: bool = False):
 			(channel.workspace == workspace_member.workspace)
 			& (workspace_member.user == frappe.session.user)
 		)
+		.left_join(omni_provider)
+		.on(channel.omni_channel_chat_provider == omni_provider.name)
 		.where(
 			((channel.is_direct_message == 1) & (channel_member.user_id == frappe.session.user))
 			| (

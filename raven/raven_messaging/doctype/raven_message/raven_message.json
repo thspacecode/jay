@@ -36,7 +36,10 @@
   "is_bot_message",
   "bot",
   "hide_link_preview",
-  "notification"
+  "notification",
+  "is_customer_message",
+  "omni_channel_skip_push_to_provider",
+  "omni_channel_msg_meta"
  ],
  "fields": [
   {
@@ -208,11 +211,28 @@
    "fieldname": "links",
    "fieldtype": "Small Text",
    "label": "Links"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_customer_message",
+   "fieldtype": "Check",
+   "label": "Is Customer Message"
+  },
+  {
+   "fieldname": "omni_channel_msg_meta",
+   "fieldtype": "JSON",
+   "label": "Omni-Channel Message Meta"
+  },
+  {
+   "default": "0",
+   "fieldname": "omni_channel_skip_push_to_provider",
+   "fieldtype": "Check",
+   "label": "Omni-channel Skip Push to Provider"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-01-31 13:55:57.988161",
+ "modified": "2026-04-22 13:42:16.280165",
  "modified_by": "Administrator",
  "module": "Raven Messaging",
  "name": "Raven Message",

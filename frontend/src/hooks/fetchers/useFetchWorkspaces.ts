@@ -1,7 +1,7 @@
 import { useFrappeGetCall } from 'frappe-react-sdk'
 import { RavenWorkspace } from '@/types/Raven/RavenWorkspace'
 
-export type WorkspaceFields = Pick<RavenWorkspace, 'name' | 'workspace_name' | 'logo' | 'type' | 'can_only_join_via_invite' | 'description'> & {
+export type WorkspaceFields = Pick<RavenWorkspace, 'name' | 'workspace_name' | 'logo' | 'type' | 'can_only_join_via_invite' | 'description' | 'is_omni_channel_workspace'> & {
     workspace_member_name?: string
     is_admin?: 0 | 1
 }

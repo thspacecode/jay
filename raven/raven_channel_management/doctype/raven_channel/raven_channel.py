@@ -16,7 +16,6 @@ class RavenChannel(Document):
 
 	if TYPE_CHECKING:
 		from frappe.types import DF
-
 		from raven.raven.doctype.raven_pinned_messages.raven_pinned_messages import RavenPinnedMessages
 
 		channel_description: DF.SmallText | None
@@ -25,6 +24,7 @@ class RavenChannel(Document):
 		dm_user_2: DF.Link | None
 		is_ai_thread: DF.Check
 		is_archived: DF.Check
+		is_customer: DF.Check
 		is_direct_message: DF.Check
 		is_dm_thread: DF.Check
 		is_self_message: DF.Check
@@ -34,6 +34,9 @@ class RavenChannel(Document):
 		last_message_timestamp: DF.Datetime | None
 		linked_doctype: DF.Link | None
 		linked_document: DF.DynamicLink | None
+		omni_channel_chat_provider: DF.Link | None
+		omni_channel_destination_id: DF.Data | None
+		omni_channel_raven_user: DF.Link | None
 		openai_thread_id: DF.Data | None
 		pinned_messages: DF.Table[RavenPinnedMessages]
 		pinned_messages_string: DF.SmallText | None
@@ -249,7 +252,9 @@ class RavenChannel(Document):
 				channel_member.insert(ignore_permissions=True)
 
 	def autoname(self):
-		if self.is_direct_message == 0 and self.is_thread == 0:
+		if self.id:
+			self.name = self.id
+		elif self.is_direct_message == 0 and self.is_thread == 0:
 			# Add workspace name to the channel name
 			self.name = self.workspace + "-" + self.channel_name.strip().lower().replace(" ", "-")
 		elif self.is_thread:

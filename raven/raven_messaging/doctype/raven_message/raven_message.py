@@ -34,7 +34,6 @@ class RavenMessage(Document):
 
 	if TYPE_CHECKING:
 		from frappe.types import DF
-
 		from raven.raven_messaging.doctype.raven_mention.raven_mention import RavenMention
 
 		blurhash: DF.SmallText | None
@@ -47,6 +46,7 @@ class RavenMessage(Document):
 		image_height: DF.Data | None
 		image_width: DF.Data | None
 		is_bot_message: DF.Check
+		is_customer_message: DF.Check
 		is_edited: DF.Check
 		is_forwarded: DF.Check
 		is_reply: DF.Check
@@ -60,6 +60,8 @@ class RavenMessage(Document):
 		message_reactions: DF.JSON | None
 		message_type: DF.Literal["Text", "Image", "File", "Poll", "System"]
 		notification: DF.Data | None
+		omni_channel_msg_meta: DF.JSON | None
+		omni_channel_skip_push_to_provider: DF.Check
 		poll_id: DF.Link | None
 		replied_message_details: DF.JSON | None
 		text: DF.LongText | None
@@ -163,7 +165,9 @@ class RavenMessage(Document):
 
 		if not self.is_new() and self.has_value_changed("message_reactions"):
 			frappe.throw(
-				_("Direct modification of message_reactions is not allowed. Use the Reactions API.")
+				_(
+					"Direct modification of message_reactions is not allowed. Use the Reactions API."
+				)
 			)
 
 	def validate_linked_message(self):
@@ -172,7 +176,8 @@ class RavenMessage(Document):
 		"""
 		if self.linked_message:
 			if (
-				frappe.get_cached_value("Raven Message", self.linked_message, "channel_id") != self.channel_id
+				frappe.get_cached_value("Raven Message", self.linked_message, "channel_id")
+				!= self.channel_id
 			):
 				frappe.throw(_("Linked message should be in the same channel"))
 
@@ -212,6 +217,10 @@ class RavenMessage(Document):
 			self.handle_ai_message()
 
 		self.send_push_notification()
+		# For file/image messages, the file isn't attached until after insert (upload_file_with_message flow).
+		# The push will happen in on_update once the file field is populated.
+		if not (self.message_type in ("Image", "File") and not self.file):
+			self.push_message_to_omni_channel_chat_provider()
 
 	def handle_ai_message(self):
 
@@ -307,13 +316,10 @@ class RavenMessage(Document):
 		channel_doc = frappe.get_cached_doc("Raven Channel", self.channel_id)
 		# If the message is a direct message, then we can only send it to one user
 		if channel_doc.is_direct_message:
-
 			if not channel_doc.is_self_message:
-
 				peer_user_doc = get_peer_user(self.channel_id, 1)
 
 				if peer_user_doc.get("type") == "User":
-
 					frappe.publish_realtime(
 						"raven:unread_channel_count_updated",
 						{
@@ -390,7 +396,11 @@ class RavenMessage(Document):
 				):
 					try:
 						frappe.get_doc(
-							{"doctype": "Raven Channel Member", "channel_id": self.channel_id, "user_id": mention.user}
+							{
+								"doctype": "Raven Channel Member",
+								"channel_id": self.channel_id,
+								"user_id": mention.user,
+							}
 						).insert(ignore_permissions=True)
 					except Exception:
 						pass
@@ -506,7 +516,9 @@ class RavenMessage(Document):
 		if is_thread:
 			title = f"{owner_name} in thread"
 		else:
-			channel_name = frappe.get_cached_value("Raven Channel", self.channel_id, "channel_name")
+			channel_name = frappe.get_cached_value(
+				"Raven Channel", self.channel_id, "channel_name"
+			)
 			title = f"{owner_name} in #{channel_name}"
 
 		# Prepare content for data payload - truncate if text message
@@ -550,7 +562,12 @@ class RavenMessage(Document):
 
 		# delete poll if the message is of type poll after deleting the message
 		if self.message_type == "Poll":
-			frappe.delete_doc("Raven Poll", self.poll_id, ignore_permissions=True, delete_permanently=True)
+			frappe.delete_doc(
+				"Raven Poll",
+				self.poll_id,
+				ignore_permissions=True,
+				delete_permanently=True,
+			)
 
 		# TEMP: this is a temp fix for the Desk interface
 		self.publish_deprecated_event_for_desk()
@@ -673,6 +690,8 @@ class RavenMessage(Document):
 			if self.message_type == "File" or self.message_type == "Image":
 				if self.file:
 					self.handle_ai_message()
+					if self.has_value_changed("file"):
+						self.push_message_to_omni_channel_chat_provider()
 
 	def on_trash(self):
 		# delete all the reactions for the message
@@ -685,7 +704,8 @@ class RavenMessage(Document):
 
 		# delete the pinned message
 		is_pinned = frappe.get_all(
-			"Raven Pinned Messages", {"message_id": self.name, "parent": self.channel_id}
+			"Raven Pinned Messages",
+			{"message_id": self.name, "parent": self.channel_id},
 		)
 		if is_pinned:
 			channel_doc = frappe.get_doc("Raven Channel", self.channel_id)
@@ -697,6 +717,13 @@ class RavenMessage(Document):
 			if pinned_row:
 				channel_doc.remove(pinned_row)
 				channel_doc.save()
+
+	def push_message_to_omni_channel_chat_provider(self) -> None:
+		from raven.omni_channel_chat.omni_channel_raven_connector import OmniChannelRavenConnector
+
+		provider = OmniChannelRavenConnector.get_provider_from_channel(self.channel_id)
+		connector = OmniChannelRavenConnector(provider=provider)
+		connector.handle_outbound(raven_message=self)
 
 
 def on_doctype_update():

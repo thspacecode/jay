@@ -1,0 +1,123 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-04-10 14:08:51.059594",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "provider",
+  "display_name",
+  "column_break_meix",
+  "raven_workspace",
+  "conf_line_sec",
+  "line_channel_secret",
+  "line_channel_access_token",
+  "conf_facebook_sec",
+  "fb_page_access_token",
+  "fb_verify_token",
+  "fb_app_secret"
+ ],
+ "fields": [
+  {
+   "fieldname": "provider",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Provider",
+   "options": "line\nfacebook",
+   "reqd": 1
+  },
+  {
+   "fieldname": "display_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Display Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_meix",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Incoming chat will be added to the specified workspace.",
+   "fieldname": "raven_workspace",
+   "fieldtype": "Link",
+   "label": "Raven Workspace",
+   "options": "Raven Workspace",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.provider==\"line\"",
+   "fieldname": "conf_line_sec",
+   "fieldtype": "Section Break",
+   "label": "Config - Line"
+  },
+  {
+   "fieldname": "line_channel_secret",
+   "fieldtype": "Password",
+   "label": "Channel Secret",
+   "length": 512,
+   "mandatory_depends_on": "eval:doc.provider==\"line\""
+  },
+  {
+   "fieldname": "line_channel_access_token",
+   "fieldtype": "Password",
+   "label": "Channel Access Token",
+   "length": 512,
+   "mandatory_depends_on": "eval:doc.provider==\"line\""
+  },
+  {
+   "depends_on": "eval:doc.provider==\"facebook\"",
+   "fieldname": "conf_facebook_sec",
+   "fieldtype": "Section Break",
+   "label": "Config - Facebook"
+  },
+  {
+   "fieldname": "fb_page_access_token",
+   "fieldtype": "Password",
+   "label": "Page Access Token",
+   "length": 512,
+   "mandatory_depends_on": "eval:doc.provider==\"facebook\""
+  },
+  {
+   "fieldname": "fb_verify_token",
+   "fieldtype": "Password",
+   "label": "Verify Token",
+   "length": 512,
+   "mandatory_depends_on": "eval:doc.provider==\"facebook\""
+  },
+  {
+   "fieldname": "fb_app_secret",
+   "fieldtype": "Password",
+   "label": "App Secret",
+   "length": 512,
+   "mandatory_depends_on": "eval:doc.provider==\"facebook\""
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-04-21 10:26:22.036135",
+ "modified_by": "Administrator",
+ "module": "Omni-Channel Chat",
+ "name": "Omni Channel Chat Provider",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

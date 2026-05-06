@@ -16,6 +16,7 @@ class RavenWorkspace(Document):
 
 		can_only_join_via_invite: DF.Check
 		description: DF.SmallText | None
+		is_omni_channel_workspace: DF.Check
 		logo: DF.AttachImage | None
 		only_admins_can_create_channels: DF.Check
 		type: DF.Literal["Public", "Private"]
