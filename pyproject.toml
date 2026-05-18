@@ -14,7 +14,8 @@ dependencies = [
  "openai-agents>=0.17.2",
  "markitdown",
  "pandas",
- "google-cloud-documentai"
+ "google-cloud-documentai",
+ "line-bot-sdk"
 ]
 
 [build-system]
