@@ -252,8 +252,8 @@ class RavenChannel(Document):
 				channel_member.insert(ignore_permissions=True)
 
 	def autoname(self):
-		if self.id:
-			self.name = self.id
+		if self.get("id"):
+			self.name = self.get("id")
 		elif self.is_direct_message == 0 and self.is_thread == 0:
 			# Add workspace name to the channel name
 			self.name = self.workspace + "-" + self.channel_name.strip().lower().replace(" ", "-")
